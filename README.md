@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🧠 Face Recognition & Emotion Detection System
+# 🧠 Facial Recognition & Emotion Detection System
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.8%2B-3776AB?style=for-the-badge&logo=python&logoColor=white" />
