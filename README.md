@@ -198,7 +198,7 @@ pip install -r requirements.txt
 
 ### Step 4 — Prepare Training Data
 
-Organize your face images inside the `data/` directory:
+Organize your face images inside the `data/` Directory:
 
 ```
 data/
