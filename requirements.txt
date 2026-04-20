@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+deepface
+opencv-python
+tensorflow
+scikit-learn
+numpy
+pandas
+pillow
+google-cloud-storage
