@@ -1,0 +1,13 @@
+[
+  {
+    "face_idx": 0,
+    "name": "UNKNOWN",
+    "name_conf": 65.01503621106475,
+    "emotion": "sad",
+    "emotion_conf": 75.04777312278748,
+    "x": 0,
+    "y": 0,
+    "w": 639,
+    "h": 479
+  }
+]

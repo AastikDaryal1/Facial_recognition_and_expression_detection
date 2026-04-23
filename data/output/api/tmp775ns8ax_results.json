@@ -1,0 +1,57 @@
+[
+  {
+    "face_idx": 0,
+    "name": "Aastik",
+    "name_conf": 100.0,
+    "emotion": "neutral",
+    "emotion_conf": 99.34024806858588,
+    "x": 746,
+    "y": 340,
+    "w": 211,
+    "h": 279
+  },
+  {
+    "face_idx": 1,
+    "name": "UNKNOWN",
+    "name_conf": 63.15787974879991,
+    "emotion": "angry",
+    "emotion_conf": 94.28805674839359,
+    "x": 985,
+    "y": 100,
+    "w": 133,
+    "h": 159
+  },
+  {
+    "face_idx": 2,
+    "name": "Shubh",
+    "name_conf": 99.54945033243173,
+    "emotion": "happy",
+    "emotion_conf": 99.85867738723755,
+    "x": 495,
+    "y": 149,
+    "w": 101,
+    "h": 123
+  },
+  {
+    "face_idx": 3,
+    "name": "Ojas",
+    "name_conf": 99.54954954954954,
+    "emotion": "happy",
+    "emotion_conf": 99.53545337492784,
+    "x": 339,
+    "y": 433,
+    "w": 121,
+    "h": 150
+  },
+  {
+    "face_idx": 4,
+    "name": "UNKNOWN",
+    "name_conf": 67.1462484100081,
+    "emotion": "neutral",
+    "emotion_conf": 91.41684276856866,
+    "x": 668,
+    "y": 116,
+    "w": 99,
+    "h": 121
+  }
+]

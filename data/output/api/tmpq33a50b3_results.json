@@ -1,0 +1,35 @@
+[
+  {
+    "face_idx": 0,
+    "name": "Ojas",
+    "name_conf": 99.54527612161428,
+    "emotion": "happy",
+    "emotion_conf": 97.89618849754333,
+    "x": 276,
+    "y": 184,
+    "w": 76,
+    "h": 76
+  },
+  {
+    "face_idx": 1,
+    "name": "Shubh",
+    "name_conf": 99.54844017485166,
+    "emotion": "happy",
+    "emotion_conf": 99.35607310271699,
+    "x": 50,
+    "y": 171,
+    "w": 108,
+    "h": 108
+  },
+  {
+    "face_idx": 2,
+    "name": "Harshita",
+    "name_conf": 100.0,
+    "emotion": "neutral",
+    "emotion_conf": 94.81624333955308,
+    "x": 477,
+    "y": 172,
+    "w": 116,
+    "h": 116
+  }
+]

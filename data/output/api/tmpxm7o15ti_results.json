@@ -1,0 +1,35 @@
+[
+  {
+    "face_idx": 0,
+    "name": "Aastik",
+    "name_conf": 100.0,
+    "emotion": "happy",
+    "emotion_conf": 61.55060529708862,
+    "x": 434,
+    "y": 109,
+    "w": 205,
+    "h": 233
+  },
+  {
+    "face_idx": 1,
+    "name": "UNKNOWN",
+    "name_conf": 99.5331894822261,
+    "emotion": "neutral",
+    "emotion_conf": 92.55759804754281,
+    "x": 312,
+    "y": 289,
+    "w": 75,
+    "h": 75
+  },
+  {
+    "face_idx": 2,
+    "name": "Shubh",
+    "name_conf": 99.54667165406087,
+    "emotion": "happy",
+    "emotion_conf": 99.6443688445531,
+    "x": 88,
+    "y": 185,
+    "w": 132,
+    "h": 132
+  }
+]

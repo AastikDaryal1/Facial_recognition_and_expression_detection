@@ -1,0 +1,24 @@
+[
+  {
+    "face_idx": 0,
+    "name": "Ojas",
+    "name_conf": 99.54903625631161,
+    "emotion": "angry",
+    "emotion_conf": 80.76631060048216,
+    "x": 335,
+    "y": 168,
+    "w": 149,
+    "h": 204
+  },
+  {
+    "face_idx": 1,
+    "name": "Shubh",
+    "name_conf": 99.54480963324347,
+    "emotion": "sad",
+    "emotion_conf": 52.220964431762695,
+    "x": 0,
+    "y": 192,
+    "w": 136,
+    "h": 169
+  }
+]

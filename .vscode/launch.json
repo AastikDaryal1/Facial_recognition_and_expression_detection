@@ -1,0 +1,111 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "▶ Train (full pipeline)",
+      "type": "python",
+      "request": "launch",
+      "module": "main",
+      "args": ["train"],
+      "cwd": "${workspaceFolder}",
+      "env": { "PYTHONPATH": "${workspaceFolder}" },
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "▶ Train (force retrain)",
+      "type": "python",
+      "request": "launch",
+      "module": "main",
+      "args": ["train", "--force-retrain", "--skip-deploy"],
+      "cwd": "${workspaceFolder}",
+      "env": { "PYTHONPATH": "${workspaceFolder}" },
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "▶ Infer (single image)",
+      "type": "python",
+      "request": "launch",
+      "module": "main",
+      "args": ["infer", "--image", "data/raw/sample.jpg"],
+      "cwd": "${workspaceFolder}",
+      "env": { "PYTHONPATH": "${workspaceFolder}" },
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "▶ Real-time Webcam",
+      "type": "python",
+      "request": "launch",
+      "module": "main",
+      "args": ["realtime"],
+      "cwd": "${workspaceFolder}",
+      "env": { "PYTHONPATH": "${workspaceFolder}" },
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "▶ API Server (dev)",
+      "type": "python",
+      "request": "launch",
+      "module": "main",
+      "args": ["api"],
+      "cwd": "${workspaceFolder}",
+      "env": { "PYTHONPATH": "${workspaceFolder}", "ENV": "development" },
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "▶ Status check",
+      "type": "python",
+      "request": "launch",
+      "module": "main",
+      "args": ["status"],
+      "cwd": "${workspaceFolder}",
+      "env": { "PYTHONPATH": "${workspaceFolder}" },
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "▶ Run Tests",
+      "type": "python",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["tests/", "-v"],
+      "cwd": "${workspaceFolder}",
+      "env": { "PYTHONPATH": "${workspaceFolder}" },
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "▶ Data Ingestion only",
+      "type": "python",
+      "request": "launch",
+      "module": "pipelines.data_ingestion",
+      "cwd": "${workspaceFolder}",
+      "env": { "PYTHONPATH": "${workspaceFolder}" },
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "▶ Preprocessing only",
+      "type": "python",
+      "request": "launch",
+      "module": "pipelines.preprocessing",
+      "cwd": "${workspaceFolder}",
+      "env": { "PYTHONPATH": "${workspaceFolder}" },
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "▶ Feature Extraction only",
+      "type": "python",
+      "request": "launch",
+      "module": "pipelines.feature_extraction",
+      "cwd": "${workspaceFolder}",
+      "env": { "PYTHONPATH": "${workspaceFolder}" },
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "▶ Training only",
+      "type": "python",
+      "request": "launch",
+      "module": "pipelines.training",
+      "cwd": "${workspaceFolder}",
+      "env": { "PYTHONPATH": "${workspaceFolder}" },
+      "console": "integratedTerminal"
+    }
+  ]
+}

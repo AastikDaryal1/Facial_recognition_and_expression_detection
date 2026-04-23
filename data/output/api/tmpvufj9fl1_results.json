@@ -1,0 +1,13 @@
+[
+  {
+    "face_idx": 0,
+    "name": "Ojas",
+    "name_conf": 100.0,
+    "emotion": "surprise",
+    "emotion_conf": 2.837071847049577e-13,
+    "x": 0,
+    "y": 0,
+    "w": 639,
+    "h": 479
+  }
+]

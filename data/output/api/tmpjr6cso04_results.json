@@ -1,0 +1,24 @@
+[
+  {
+    "face_idx": 0,
+    "name": "Aastik",
+    "name_conf": 100.0,
+    "emotion": "happy",
+    "emotion_conf": 95.13322172960976,
+    "x": 381,
+    "y": 95,
+    "w": 98,
+    "h": 98
+  },
+  {
+    "face_idx": 1,
+    "name": "Ojas",
+    "name_conf": 97.9383203168824,
+    "emotion": "neutral",
+    "emotion_conf": 82.9266905784607,
+    "x": 396,
+    "y": 186,
+    "w": 82,
+    "h": 82
+  }
+]

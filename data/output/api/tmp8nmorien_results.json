@@ -1,0 +1,35 @@
+[
+  {
+    "face_idx": 0,
+    "name": "Aastik",
+    "name_conf": 100.0,
+    "emotion": "neutral",
+    "emotion_conf": 99.75741505622864,
+    "x": 326,
+    "y": 68,
+    "w": 96,
+    "h": 96
+  },
+  {
+    "face_idx": 1,
+    "name": "Shubh",
+    "name_conf": 100.0,
+    "emotion": "happy",
+    "emotion_conf": 83.94491076469421,
+    "x": 165,
+    "y": 169,
+    "w": 134,
+    "h": 134
+  },
+  {
+    "face_idx": 2,
+    "name": "Ojas",
+    "name_conf": 99.5479407478117,
+    "emotion": "neutral",
+    "emotion_conf": 81.32047057151794,
+    "x": 485,
+    "y": 216,
+    "w": 120,
+    "h": 120
+  }
+]

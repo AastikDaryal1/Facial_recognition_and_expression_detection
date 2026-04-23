@@ -1,0 +1,24 @@
+[
+  {
+    "face_idx": 0,
+    "name": "Harshita",
+    "name_conf": 100.0,
+    "emotion": "neutral",
+    "emotion_conf": 99.57907795906067,
+    "x": 507,
+    "y": 69,
+    "w": 129,
+    "h": 129
+  },
+  {
+    "face_idx": 1,
+    "name": "Shubh",
+    "name_conf": 99.54565039033984,
+    "emotion": "sad",
+    "emotion_conf": 79.35715790731656,
+    "x": 288,
+    "y": 218,
+    "w": 107,
+    "h": 107
+  }
+]
