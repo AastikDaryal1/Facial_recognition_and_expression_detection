@@ -274,7 +274,7 @@ function AppShell({ children }) {
         }
       })
       if (!res.ok) {
-        setErrorMsg('Invalid API Key')
+        setErrorMsg('Incorrect Password')
         setIsValidating(false)
         return
       }
