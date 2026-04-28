@@ -1,0 +1,46 @@
+{
+  "members": [
+    "Aastik",
+    "Harshita",
+    "Kashish",
+    "Lakshay",
+    "Ojas",
+    "Shivani",
+    "Shubh"
+  ],
+  "threshold": 0.7,
+  "cosine_threshold": 0.5,
+  "n_embeddings": 433,
+  "emotion_box_colors": {
+    "angry": [
+      244,
+      67,
+      54
+    ],
+    "happy": [
+      76,
+      175,
+      80
+    ],
+    "neutral": [
+      255,
+      152,
+      0
+    ],
+    "sad": [
+      255,
+      193,
+      7
+    ],
+    "surprise": [
+      156,
+      39,
+      176
+    ],
+    "unknown": [
+      255,
+      255,
+      255
+    ]
+  }
+}
