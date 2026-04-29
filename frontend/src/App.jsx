@@ -369,7 +369,7 @@ function LandingPage() {
     if (!apiKey) return
 
     // Fetch system metrics
-    fetch(`${import.meta.env.VITE_API_URL}/metrics`, {
+    fetch(`${API_BASE}/metrics`, {
       headers: { 'X-API-Key': apiKey }
     })
       .then(res => res.json())
@@ -383,7 +383,7 @@ function LandingPage() {
       .catch(() => {})
 
     // Fetch model info (members)
-    fetch(`${import.meta.env.VITE_API_URL}/model/info`, {
+    fetch(`${API_BASE}/model/info`, {
       headers: { 'X-API-Key': apiKey }
     })
       .then(res => res.json())

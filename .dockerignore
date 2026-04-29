@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
+.env
+
+# Node / Frontend
+frontend/node_modules/
+frontend/.venv/
+frontend/dist/
+frontend/.vite/
+
+# Data & Models (will be mounted via volumes)
+data/output/
+data/processed/
+logs/
+saved_models/
+storage/
+secrets/
+
+# Git
+.git/
+.gitignore
+
+# OS
+.DS_Store
+Thumbs.db
