@@ -122,6 +122,7 @@ const emotionColors = {
   Neutral: '#BDC3C7',
   Sad: '#3498DB',
   Surprise: '#FF9F43',
+  Uncertain: '#64748b',
 }
 
 function getEmotionColor(emotion) {
@@ -216,7 +217,8 @@ function FaceCard({ face, delay, onHover, isHighlighted }) {
           <strong>Name:</strong> {isUnknown ? 'UNKNOWN' : face.name}
         </p>
         <p>
-          <strong>Emotion:</strong> <span style={{ color }}>{face.emotion}</span>
+          <strong>Emotion:</strong> <span style={{ color }}>{face.emotion === 'uncertain' ? 'Uncertain' : face.emotion}</span>
+          {face.emotion === 'uncertain' && <Zap size={12} style={{ marginLeft: '4px', opacity: 0.7 }} />}
         </p>
       </div>
       <div className="face-card-right">
@@ -1120,9 +1122,9 @@ function LivePage() {
                         {(isSimulating && simulatedProgress < 70) ? (
                           <>Analyzing...</>
                         ) : isUnknown ? (
-                          <><HelpCircle size={12} className="inline-icon" /> UNKNOWN - {face.emotion}</>
+                          <><HelpCircle size={12} className="inline-icon" /> UNKNOWN - {face.emotion === 'uncertain' ? '?' : face.emotion}</>
                         ) : (
-                          <><User size={12} className="inline-icon" /> {face.name} - {face.emotion}</>
+                          <><User size={12} className="inline-icon" /> {face.name} - {face.emotion === 'uncertain' ? '?' : face.emotion}</>
                         )}
                       </span>
                     </div>
@@ -1164,9 +1166,9 @@ function LivePage() {
                         border: `1px solid ${color}`
                       }}>
                         {isUnknown ? (
-                          <><HelpCircle size={12} className="inline-icon" /> UNKNOWN - {face.emotion}</>
+                          <><HelpCircle size={12} className="inline-icon" /> UNKNOWN - {face.emotion === 'uncertain' ? '?' : face.emotion}</>
                         ) : (
-                          <><User size={12} className="inline-icon" /> {face.name} - {face.emotion}</>
+                          <><User size={12} className="inline-icon" /> {face.name} - {face.emotion === 'uncertain' ? '?' : face.emotion}</>
                         )}
                       </span>
                     </div>

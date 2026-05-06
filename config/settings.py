@@ -68,10 +68,11 @@ SVM_CONFIDENCE_THRESHOLD    = float(os.getenv("SVM_CONFIDENCE_THRESHOLD",  "0.60
 COSINE_SIMILARITY_THRESHOLD = float(os.getenv("COSINE_SIMILARITY_THRESHOLD","0.40"))
 
 # ── Emotion inference thresholds ─────────────────────────────────────────────
-EMOTION_CONFIDENCE_THRESHOLD = float(os.getenv("EMOTION_CONFIDENCE_THRESHOLD", "55.0"))
-VOTE_BUFFER_SIZE             = 5
-COOLDOWN_SECONDS             = 0.4
-HARD_SWITCH_THRESHOLD        = 75.0
+EMOTION_CONFIDENCE_THRESHOLD  = float(os.getenv("EMOTION_CONFIDENCE_THRESHOLD", "55.0"))
+EMOTION_UNCERTAINTY_THRESHOLD = float(os.getenv("EMOTION_UNCERTAINTY_THRESHOLD", "0.45"))
+VOTE_BUFFER_SIZE              = 5
+COOLDOWN_SECONDS              = 0.4
+HARD_SWITCH_THRESHOLD         = 75.0
 
 TRACKED_EMOTIONS = ["happy", "neutral", "surprise", "angry", "sad", "fear", "disgust"]
 
@@ -124,9 +125,16 @@ API_PORT = int(os.getenv("API_PORT", "8000"))
 default_api_workers = "1" if os.name == "nt" else "2"
 API_WORKERS = int(os.getenv("API_WORKERS", default_api_workers))
 
-# ── Security ──────────────────────────────────────────────────────────────────
+# ── Security & Validation ─────────────────────────────────────────────────────
 API_KEY             = os.getenv("API_KEY", "")
 MAX_UPLOAD_SIZE_MB  = int(os.getenv("MAX_UPLOAD_SIZE_MB", "5"))
 MAX_RUNTIME_MINUTES = int(os.getenv("MAX_RUNTIME_MINUTES", "10"))
 RATE_LIMIT          = os.getenv("RATE_LIMIT", "10/minute")
 LOW_LIGHT_THRESHOLD = int(os.getenv("LOW_LIGHT_THRESHOLD", "40"))
+
+# Production Validation Thresholds
+FACE_CONFIDENCE_THRESHOLD = float(os.getenv("FACE_CONFIDENCE_THRESHOLD", "0.85"))
+MIN_FACE_WIDTH            = int(os.getenv("MIN_FACE_WIDTH", "80"))
+MIN_FACE_HEIGHT           = int(os.getenv("MIN_FACE_HEIGHT", "80"))
+MAX_FACE_AREA_FRACTION    = float(os.getenv("MAX_FACE_AREA_FRACTION", "0.45"))
+FACE_BLUR_THRESHOLD       = float(os.getenv("FACE_BLUR_THRESHOLD", "100.0"))
