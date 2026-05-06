@@ -27,8 +27,8 @@ ENV       = os.getenv("ENV", "development")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
 # ── Google Cloud Storage ──────────────────────────────────────────────────────
-GCS_PROJECT_ID = os.getenv("GCS_PROJECT_ID", "united-monument-388200")
-GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "face-emotion-dataset")
+GCS_PROJECT_ID = os.getenv("GCS_PROJECT_ID", "")
+GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "")
 GCS_KEY_PATH   = os.getenv("GCS_KEY_PATH", "secrets/gcs_key.json")
 
 # Remote paths inside the bucket
@@ -125,7 +125,7 @@ default_api_workers = "1" if os.name == "nt" else "2"
 API_WORKERS = int(os.getenv("API_WORKERS", default_api_workers))
 
 # ── Security ──────────────────────────────────────────────────────────────────
-API_KEY             = os.getenv("API_KEY", "change_me_in_production")
+API_KEY             = os.getenv("API_KEY", "")
 MAX_UPLOAD_SIZE_MB  = int(os.getenv("MAX_UPLOAD_SIZE_MB", "5"))
 MAX_RUNTIME_MINUTES = int(os.getenv("MAX_RUNTIME_MINUTES", "10"))
 RATE_LIMIT          = os.getenv("RATE_LIMIT", "10/minute")
