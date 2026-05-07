@@ -23,6 +23,7 @@ def validate_face_region(
     region: dict, 
     img_bgr: np.ndarray, 
     img_shape: tuple[int, int],
+    confidence: float = 1.0,
     face_idx: int = 0
 ) -> tuple[bool, Optional[str]]:
     """
@@ -30,7 +31,7 @@ def validate_face_region(
     Checks: Confidence, Dimensions, Frame Area, Aspect Ratio, and Blur.
     """
     x, y, w, h = region.get("x", 0), region.get("y", 0), region.get("w", 0), region.get("h", 0)
-    conf = region.get("confidence", 1.0)
+    conf = confidence
     h_img, w_img = img_shape
     
     # 1. Detector Confidence
@@ -54,6 +55,15 @@ def validate_face_region(
     aspect_ratio = w / h
     if aspect_ratio < 0.6 or aspect_ratio > 1.6:
         return False, f"Invalid aspect ratio ({aspect_ratio:.2f})"
+
+    # 5. Hallucination Guard: Large + Perfectly Centered
+    # If the face is very large and nearly perfectly centered, it's often a false-positive
+    if area_fraction > 0.3:
+        center_x = x + w/2
+        center_y = y + h/2
+        dist_from_center = abs(center_x - w_img/2) / w_img + abs(center_y - h_img/2) / h_img
+        if dist_from_center < 0.02: # Within 2% of perfect center
+             return False, "Suspected full-frame hallucination (perfectly centered + large)"
     
     # 5. Blur Detection (Laplacian Variance)
     try:

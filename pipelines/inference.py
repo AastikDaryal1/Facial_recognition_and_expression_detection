@@ -222,7 +222,8 @@ def run(
         region = face_obj.get("facial_area", face_obj.get("region", {}))
         
         # ── Quality Gatekeeper ─────────────────────────────────────────────
-        is_valid, reason = validate_face_region(region, img_bgr, (h_orig, w_orig), i)
+        conf = face_obj.get("confidence", 1.0)
+        is_valid, reason = validate_face_region(region, img_bgr, (h_orig, w_orig), conf, i)
         if not is_valid:
             log.warning("  [REJECTED] Face %d: %s", i + 1, reason)
             continue

@@ -168,7 +168,8 @@ def run(camera_index: int = 0, window_name: str = "Emotion Detector") -> None:
                     region         = first.get("region", {})
                     
                     # ── Quality Gatekeeper ─────────────────────────────────────
-                    is_valid, reason = validate_face_region(region, frame, frame.shape[:2])
+                    conf = first.get("confidence", 1.0)
+                    is_valid, reason = validate_face_region(region, frame, frame.shape[:2], conf)
                     if not is_valid:
                         log.debug("  [REJECTED] Realtime Frame: %s", reason)
                         emotion_buffer.clear()

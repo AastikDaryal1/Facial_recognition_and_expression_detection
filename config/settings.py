@@ -133,8 +133,8 @@ RATE_LIMIT          = os.getenv("RATE_LIMIT", "10/minute")
 LOW_LIGHT_THRESHOLD = int(os.getenv("LOW_LIGHT_THRESHOLD", "40"))
 
 # Production Validation Thresholds
-FACE_CONFIDENCE_THRESHOLD = float(os.getenv("FACE_CONFIDENCE_THRESHOLD", "0.85"))
-MIN_FACE_WIDTH            = int(os.getenv("MIN_FACE_WIDTH", "80"))
-MIN_FACE_HEIGHT           = int(os.getenv("MIN_FACE_HEIGHT", "80"))
-MAX_FACE_AREA_FRACTION    = float(os.getenv("MAX_FACE_AREA_FRACTION", "0.45"))
-FACE_BLUR_THRESHOLD       = float(os.getenv("FACE_BLUR_THRESHOLD", "100.0"))
+FACE_CONFIDENCE_THRESHOLD = float(os.getenv("FACE_CONFIDENCE_THRESHOLD", "0.90"))
+MIN_FACE_WIDTH            = int(os.getenv("MIN_FACE_WIDTH", "100"))
+MIN_FACE_HEIGHT           = int(os.getenv("MIN_FACE_HEIGHT", "100"))
+MAX_FACE_AREA_FRACTION    = float(os.getenv("MAX_FACE_AREA_FRACTION", "0.35"))
+FACE_BLUR_THRESHOLD       = float(os.getenv("FACE_BLUR_THRESHOLD", "120.0"))
