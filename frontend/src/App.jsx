@@ -365,7 +365,6 @@ function ActionCard({ icon: Icon, title, description, buttonText, to }) {
 function LandingPage() {
   const { apiKey } = useApiKey()
   const [stats, setStats] = useState({ uptime: '0s', latency: '0s', count: 0 })
-  const [members, setMembers] = useState([])
 
   useEffect(() => {
     if (!apiKey) return
@@ -384,15 +383,7 @@ function LandingPage() {
       })
       .catch(() => {})
 
-    // Fetch model info (members)
-    fetch(`${API_BASE}/model/info`, {
-      headers: { 'X-API-Key': apiKey }
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (data.members) setMembers(data.members)
-      })
-      .catch(() => {})
+
   }, [apiKey])
 
   return (
@@ -484,19 +475,7 @@ function LandingPage() {
         </div>
       </div>
 
-      {members.length > 0 && (
-        <div className="home-section">
-          <div className="section-header">
-            <Users size={20} />
-            <h2>Recognition Library</h2>
-          </div>
-          <div className="members-library">
-            {members.map(name => (
-              <span key={name} className="member-chip">{name}</span>
-            ))}
-          </div>
-        </div>
-      )}
+
     </section>
   )
 }
