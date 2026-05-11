@@ -24,6 +24,8 @@ import {
   Zap,
   Users,
   Cpu,
+  Menu,
+  X,
 } from 'lucide-react'
 
 const ApiKeyContext = createContext()
@@ -288,12 +290,17 @@ function AppShell({ children }) {
   const [isValidating, setIsValidating] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
 
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+
   useEffect(() => {
     if (showSettings) {
       setTempKey(apiKey)
       setErrorMsg('')
     }
   }, [showSettings, apiKey])
+
+  const toggleMobileMenu = () => setIsMobileMenuOpen(!isMobileMenuOpen)
+  const closeMobileMenu = () => setIsMobileMenuOpen(false)
 
   const saveSettings = async () => {
     if (!tempKey) {
@@ -324,26 +331,32 @@ function AppShell({ children }) {
   return (
     <div className="app-shell">
       <header className="topbar glass-card">
-        <Link className="brand" to="/">
+        <Link className="brand" to="/" onClick={closeMobileMenu}>
           <Sparkles size={18} />
           <span>VisionX</span>
         </Link>
-        <nav className="nav">
+        
+        <button className="mobile-toggle" onClick={toggleMobileMenu}>
+          {isMobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
+        </button>
+
+        <nav className={`nav ${isMobileMenuOpen ? 'mobile-open' : ''}`}>
           {navItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              onClick={closeMobileMenu}
             >
               {item.label}
             </NavLink>
           ))}
           {apiKey ? (
-            <button className="secondary-btn" onClick={logout} style={{ marginLeft: '0.5rem', padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}>
+            <button className="secondary-btn" onClick={() => { logout(); closeMobileMenu(); }} style={{ marginLeft: '0.5rem', padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}>
               Log Out
             </button>
           ) : (
-            <button className="primary-btn" onClick={() => setShowSettings(true)} style={{ marginTop: 0, marginLeft: '0.5rem', padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}>
+            <button className="primary-btn" onClick={() => { setShowSettings(true); closeMobileMenu(); }} style={{ marginTop: 0, marginLeft: '0.5rem', padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}>
               Log In
             </button>
           )}
@@ -1150,11 +1163,10 @@ function LivePage() {
         }
       } catch (err) {
         console.error('Live detection error:', err)
-      }
-
-      // Schedule the next frame only after this one completes
-      if (isActive) {
-        timeoutId = setTimeout(processFrame, 200)
+      } finally {
+        if (isActive) {
+          timeoutId = setTimeout(processFrame, 400)
+        }
       }
     }
 

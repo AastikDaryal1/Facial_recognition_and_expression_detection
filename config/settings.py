@@ -64,7 +64,7 @@ AUGMENT_NOISE_STD      = 0.01
 RANDOM_STATE           = 42
 
 # ── Identity / recognition thresholds ────────────────────────────────────────
-SVM_CONFIDENCE_THRESHOLD    = float(os.getenv("SVM_CONFIDENCE_THRESHOLD",  "0.60"))
+SVM_CONFIDENCE_THRESHOLD    = float(os.getenv("SVM_CONFIDENCE_THRESHOLD",  "0.80"))
 COSINE_SIMILARITY_THRESHOLD = float(os.getenv("COSINE_SIMILARITY_THRESHOLD","0.40"))
 
 # ── Emotion inference thresholds ─────────────────────────────────────────────
@@ -133,7 +133,7 @@ RATE_LIMIT          = os.getenv("RATE_LIMIT", "10/minute")
 LOW_LIGHT_THRESHOLD = int(os.getenv("LOW_LIGHT_THRESHOLD", "40"))
 
 # Production Validation Thresholds
-FACE_CONFIDENCE_THRESHOLD = float(os.getenv("FACE_CONFIDENCE_THRESHOLD", "0.90"))
+FACE_CONFIDENCE_THRESHOLD = float(os.getenv("FACE_CONFIDENCE_THRESHOLD", "0.95"))
 MIN_FACE_WIDTH            = int(os.getenv("MIN_FACE_WIDTH", "100"))
 MIN_FACE_HEIGHT           = int(os.getenv("MIN_FACE_HEIGHT", "100"))
 MAX_FACE_AREA_FRACTION    = float(os.getenv("MAX_FACE_AREA_FRACTION", "0.35"))
