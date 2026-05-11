@@ -122,7 +122,6 @@ const emotionColors = {
   Neutral: '#BDC3C7',
   Sad: '#3498DB',
   Surprise: '#FF9F43',
-  Uncertain: '#64748b',
 }
 
 function getEmotionColor(emotion) {
@@ -135,13 +134,16 @@ function getEmotionColor(emotion) {
 
 function Legend() {
   return (
-    <div className="dual-legend glass-card fade-in-up">
+    <div className="dual-legend glass-card fade-in-up" style={{ animationDelay: '0.3s' }}>
       <div className="legend-section">
-        <h4 className="legend-title">Emotion (Color)</h4>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <h4 className="legend-title">Emotion (Color)</h4>
+          <HelpCircle size={14} style={{ opacity: 0.5, cursor: 'help' }} title="Each emotion is mapped to a unique color border." />
+        </div>
         <div className="legend-items">
           {Object.entries(emotionColors).map(([emotion, color]) => (
-            <div key={emotion} className="legend-item">
-              <span className="legend-color" style={{ backgroundColor: color, boxShadow: `0 0 6px ${color}` }}></span>
+            <div key={emotion} className="legend-item" title={`${emotion} detection color`}>
+              <div className="legend-color" style={{ backgroundColor: color, boxShadow: `0 0 10px ${color}` }}></div>
               <span className="legend-text">{emotion}</span>
             </div>
           ))}
@@ -149,15 +151,18 @@ function Legend() {
       </div>
       <div className="legend-divider"></div>
       <div className="legend-section">
-        <h4 className="legend-title">Identity (Style)</h4>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <h4 className="legend-title">Identity (Style)</h4>
+          <HelpCircle size={14} style={{ opacity: 0.5, cursor: 'help' }} title="Solid lines for known people, dashed for unknowns." />
+        </div>
         <div className="legend-items">
-          <div className="legend-item style-known">
-            <span className="legend-style-box solid"></span>
-            <span className="legend-text"><User size={14} className="inline-icon" /> Known</span>
+          <div className="legend-item">
+            <div className="legend-style-box solid"></div>
+            <span className="legend-text">Known Member</span>
           </div>
-          <div className="legend-item style-unknown">
-            <span className="legend-style-box dashed"></span>
-            <span className="legend-text"><HelpCircle size={14} className="inline-icon" /> Unknown</span>
+          <div className="legend-item">
+            <div className="legend-style-box dashed"></div>
+            <span className="legend-text">Unknown Subject</span>
           </div>
         </div>
       </div>
@@ -200,36 +205,43 @@ function FaceCard({ face, delay, onHover, isHighlighted }) {
       onMouseEnter={() => onHover && onHover(face.face_idx !== undefined ? face.face_idx : face.id)}
       onMouseLeave={() => onHover && onHover(null)}
       style={{
-        borderColor: isHighlighted ? '#fff' : color,
+        borderColor: isHighlighted ? '#fff' : `${color}44`,
         borderStyle: isUnknown ? 'dashed' : 'solid',
-        boxShadow: isHighlighted ? `0 0 20px ${color}` : `0 0 8px ${color}33`,
+        boxShadow: isHighlighted ? `0 0 25px ${color}` : 'none',
         animationDelay: delay ? `${delay}s` : '0s',
-        transform: isHighlighted ? 'translateY(-5px) scale(1.02)' : 'none',
-        filter: isHighlighted ? 'brightness(1.2)' : 'none',
-        zIndex: isHighlighted ? 10 : 1
+        zIndex: isHighlighted ? 10 : 1,
+        background: isHighlighted ? `linear-gradient(135deg, rgba(30, 41, 59, 0.8), ${color}11)` : 'var(--card)'
       }}
     >
       <div className="face-card-left">
         <FaceAvatar face={face} color={color} />
       </div>
       <div className="face-card-middle">
-        <p style={{ color: isUnknown ? '#ffffff' : 'inherit' }}>
-          <strong>Name:</strong> {isUnknown ? 'UNKNOWN' : face.name}
+        <p style={{ fontWeight: 600, color: isUnknown ? 'var(--muted)' : 'var(--text)' }}>
+          {isUnknown ? 'IDENTIFYING...' : face.name}
         </p>
-        <p>
-          <strong>Emotion:</strong> <span style={{ color }}>{face.emotion === 'uncertain' ? 'Uncertain' : face.emotion}</span>
-          {face.emotion === 'uncertain' && <Zap size={12} style={{ marginLeft: '4px', opacity: 0.7 }} />}
-        </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ 
+            fontSize: '0.75rem', 
+            padding: '2px 8px', 
+            borderRadius: '4px', 
+            backgroundColor: `${color}22`,
+            color: color,
+            border: `1px solid ${color}44`,
+            textTransform: 'uppercase',
+            fontWeight: 700
+          }}>
+            {face.emotion}
+          </span>
+        </div>
       </div>
       <div className="face-card-right">
         {isUnknown ? (
-          <span className="identity-badge unknown">
-            <HelpCircle size={14} /> Unknown
-          </span>
+          <HelpCircle size={18} style={{ color: 'var(--muted)', opacity: 0.5 }} />
         ) : (
-          <span className="identity-badge known">
-            <User size={14} /> Known
-          </span>
+          <div className="status-icon-ring" style={{ width: '28px', height: '28px', backgroundColor: 'transparent' }}>
+             <User size={14} style={{ color: 'var(--success)' }} />
+          </div>
         )}
       </div>
     </div>
@@ -238,13 +250,34 @@ function FaceCard({ face, delay, onHover, isHighlighted }) {
 
 function SkeletonCard() {
   return (
-    <div className="skeleton-card fade-in-up">
-      <div className="skeleton-avatar"></div>
-      <div className="skeleton-text-block">
-        <div className="skeleton-text short"></div>
-        <div className="skeleton-text long"></div>
+    <div className="face-card shimmer-bg" style={{ opacity: 0.5, borderStyle: 'solid' }}>
+      <div className="face-card-left">
+        <div className="avatar-square" style={{ background: 'rgba(255,255,255,0.05)', border: 'none' }}></div>
       </div>
-      <div className="skeleton-text short" style={{ width: '60px' }}></div>
+      <div className="face-card-middle">
+        <div style={{ height: '14px', width: '60%', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', marginBottom: '8px' }}></div>
+        <div style={{ height: '10px', width: '40%', background: 'rgba(255,255,255,0.05)', borderRadius: '4px' }}></div>
+      </div>
+    </div>
+  )
+}
+
+function StatusCard({ icon: Icon, title, subtitle, variant = "default" }) {
+  return (
+    <div className="status-card fade-in" style={{ 
+      borderColor: variant === "warning" ? "rgba(250, 204, 21, 0.2)" : "rgba(59, 130, 246, 0.2)",
+      background: variant === "warning" ? "rgba(250, 204, 21, 0.05)" : "rgba(30, 41, 59, 0.4)"
+    }}>
+      <div className="status-icon-ring" style={{ 
+        color: variant === "warning" ? "var(--warning)" : "var(--accent-blue)",
+        backgroundColor: variant === "warning" ? "rgba(250, 204, 21, 0.1)" : "rgba(59, 130, 246, 0.1)"
+      }}>
+        <Icon size={24} className={variant === "default" ? "float" : ""} />
+      </div>
+      <div style={{ textAlign: 'center' }}>
+        <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600 }}>{title}</h4>
+        <p style={{ margin: '4px 0 0', fontSize: '0.9rem', color: 'var(--muted)', maxWidth: '240px' }}>{subtitle}</p>
+      </div>
     </div>
   )
 }
@@ -331,10 +364,10 @@ function AppShell({ children }) {
               onChange={(e) => setTempKey(e.target.value)}
               placeholder="Enter Password..."
             />
-            {errorMsg && <p style={{color: '#FF4C4C', fontSize: '0.9rem', marginTop: '0.5rem'}}>{errorMsg}</p>}
-            <div style={{display: 'flex', gap: '1rem', marginTop: '1.5rem', justifyContent: 'flex-end'}}>
+            {errorMsg && <p style={{ color: '#FF4C4C', fontSize: '0.9rem', marginTop: '0.5rem' }}>{errorMsg}</p>}
+            <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem', justifyContent: 'flex-end' }}>
               <button className="secondary-btn" onClick={() => setShowSettings(false)}>Cancel</button>
-              <button className="primary-btn" style={{marginTop: 0}} onClick={saveSettings} disabled={isValidating}>
+              <button className="primary-btn" style={{ marginTop: 0 }} onClick={saveSettings} disabled={isValidating}>
                 {isValidating ? 'Verifying...' : 'Continue'}
               </button>
             </div>
@@ -365,6 +398,7 @@ function ActionCard({ icon: Icon, title, description, buttonText, to }) {
 function LandingPage() {
   const { apiKey } = useApiKey()
   const [stats, setStats] = useState({ uptime: '0s', latency: '0s', count: 0 })
+  const [members, setMembers] = useState([])
 
   useEffect(() => {
     if (!apiKey) return
@@ -381,9 +415,17 @@ function LandingPage() {
           count: data.request_count || 0
         })
       })
-      .catch(() => {})
+      .catch(() => { })
 
-
+    // Fetch model info (members)
+    fetch(`${API_BASE}/model/info`, {
+      headers: { 'X-API-Key': apiKey }
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.members) setMembers(data.members)
+      })
+      .catch(() => { })
   }, [apiKey])
 
   return (
@@ -530,7 +572,8 @@ function UploadPage() {
     }
 
     if (!file) {
-      setError('Upload an image before running detection.')
+      setError(`🚀 Ready for detection!\n
+        📸 Upload or capture an image to continue.`)
       return
     }
     setLoading(true)
@@ -660,13 +703,23 @@ function UploadPage() {
         }}
         onDragLeave={() => setDragActive(false)}
         onDrop={handleDrop}
+        onClick={() => document.getElementById('file-input').click()}
       >
-        <CloudUpload size={34} />
-        <p>Drop image here or select from file picker</p>
-        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+        <div className="upload-icon-wrapper">
+          <div className="upload-glow"></div>
+          <CloudUpload size={42} className={dragActive ? 'float' : ''} style={{ color: dragActive ? 'var(--neon-cyan)' : 'var(--accent-blue)', position: 'relative' }} />
+        </div>
+        <div style={{ marginBottom: '0.5rem' }}>
+          <p style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text)', marginBottom: '4px' }}>
+            {dragActive ? 'Drop to Initialize' : 'AI Analysis Hub'}
+          </p>
+          <p className="muted" style={{ fontSize: '0.85rem' }}>Drop image here or click to browse</p>
+        </div>
+        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }} onClick={(e) => e.stopPropagation()}>
           <label className="secondary-btn">
             Choose Image
             <input
+              id="file-input"
               type="file"
               accept="image/*"
               hidden
@@ -703,99 +756,153 @@ function UploadPage() {
       )}
 
       <div className="upload-layout">
-        <article className="glass-card preview-panel">
-          <h3>Preview</h3>
-          {previewUrl ? (
-            <div className="preview-image-container">
-              <img 
-                src={previewUrl} 
-                alt="Selected preview" 
-                className={`preview-image ${isSimulating && simulatedProgress < 90 ? 'processing' : ''}`} 
-                onLoad={(e) => setImgDims({ w: e.target.naturalWidth, h: e.target.naturalHeight })}
-              />
-              {isSimulating && simulatedProgress < 100 && (
-                <div className="scanning-beam"></div>
-              )}
-              {result && simulatedProgress >= 40 && result.results.map((face, idx) => {
-                const isUnknown = !face.name || face.name.toLowerCase() === 'unknown'
-                const color = getEmotionColor(face.emotion)
+        <article className="glass-card preview-panel" style={{ display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+            <h3 style={{ fontSize: '1.1rem' }}>Source Preview</h3>
+            {previewUrl && (
+               <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.1)', color: 'var(--accent-blue)', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                  {imgDims.w}x{imgDims.h}px
+               </span>
+            )}
+          </div>
 
-                // The backend resizes images to a max width of 640px before inference.
-                // We must calculate the effective dimensions to scale the bounding boxes correctly.
-                const effectiveW = Math.min(imgDims.w, 640)
-                const scale = effectiveW / imgDims.w
-                const effectiveH = imgDims.h * scale
+          <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            {previewUrl ? (
+              <div className="preview-image-container fade-in" style={{ boxShadow: '0 0 40px rgba(0,0,0,0.5)', borderRadius: '1rem', overflow: 'hidden' }}>
+                <img
+                  src={previewUrl}
+                  alt="Selected preview"
+                  className={`preview-image ${isSimulating && simulatedProgress < 90 ? 'processing' : ''}`}
+                  onLoad={(e) => setImgDims({ w: e.target.naturalWidth, h: e.target.naturalHeight })}
+                  style={{ width: '100%', height: 'auto', borderRadius: '0' }}
+                />
+                {isSimulating && simulatedProgress < 100 && (
+                  <div className="scanning-beam"></div>
+                )}
+                {result && simulatedProgress >= 40 && result.results.map((face, idx) => {
+                  const isUnknown = !face.name || face.name.toLowerCase() === 'unknown'
+                  const color = getEmotionColor(face.emotion)
 
-                return (
-                  <div
-                    key={idx}
-                    className={`face-box scale-in ${hoveredFaceId === face.face_idx ? 'highlighted' : ''}`}
-                    onMouseEnter={() => setHoveredFaceId(face.face_idx)}
-                    onMouseLeave={() => setHoveredFaceId(null)}
-                    style={{
-                      left: `${(face.x / effectiveW) * 100}%`,
-                      top: `${(face.y / effectiveH) * 100}%`,
-                      width: `${(face.w / effectiveW) * 100}%`,
-                      height: `${(face.h / effectiveH) * 100}%`,
-                      borderColor: (isSimulating && simulatedProgress < 70) ? '#64748b' : (hoveredFaceId === face.face_idx ? '#fff' : color),
-                      borderStyle: isUnknown && (!isSimulating || simulatedProgress >= 70) ? 'dashed' : 'solid',
-                      boxShadow: (isSimulating && simulatedProgress < 70) ? 'none' : (hoveredFaceId === face.face_idx ? `0 0 25px 2px ${color}` : `0 0 10px ${color}`),
-                      zIndex: hoveredFaceId === face.face_idx ? 100 : 1
-                    }}
-                  >
-                    <span className={isSimulating && simulatedProgress < 70 ? 'label-analyzing' : ''} style={{
-                      backgroundColor: isUnknown && (!isSimulating || simulatedProgress >= 70) ? '#000000' : 'rgba(15, 23, 42, 0.85)',
-                      color: (isSimulating && simulatedProgress < 70) ? '#e2e8f0' : color,
-                      border: `1px solid ${(isSimulating && simulatedProgress < 70) ? '#64748b' : color}`
-                    }}>
-                      {(isSimulating && simulatedProgress < 70) ? (
-                        <>Analyzing...</>
-                      ) : isUnknown ? (
-                        <><HelpCircle size={12} className="inline-icon" /> UNKNOWN - {face.emotion}</>
-                      ) : (
-                        <><User size={12} className="inline-icon" /> {face.name} - {face.emotion}</>
-                      )}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-          ) : (
-            <p className="muted">No image selected yet.</p>
-          )}
-          <button className="primary-btn" onClick={runPrediction} disabled={loading}>
-            {loading ? 'Processing...' : 'Detect Face & Emotion'}
+                  // The backend resizes images to a max width of 640px before inference.
+                  // We must calculate the effective dimensions to scale the bounding boxes correctly.
+                  const effectiveW = Math.min(imgDims.w, 640)
+                  const scale = effectiveW / imgDims.w
+                  const effectiveH = imgDims.h * scale
+
+                  return (
+                    <div
+                      key={idx}
+                      className={`face-box scale-in ${hoveredFaceId === face.face_idx ? 'highlighted' : ''}`}
+                      onMouseEnter={() => setHoveredFaceId(face.face_idx)}
+                      onMouseLeave={() => setHoveredFaceId(null)}
+                      style={{
+                        left: `${(face.x / effectiveW) * 100}%`,
+                        top: `${(face.y / effectiveH) * 100}%`,
+                        width: `${(face.w / effectiveW) * 100}%`,
+                        height: `${(face.h / effectiveH) * 100}%`,
+                        borderColor: (isSimulating && simulatedProgress < 70) ? '#64748b' : (hoveredFaceId === face.face_idx ? '#fff' : color),
+                        borderStyle: isUnknown && (!isSimulating || simulatedProgress >= 70) ? 'dashed' : 'solid',
+                        boxShadow: (isSimulating && simulatedProgress < 70) ? 'none' : (hoveredFaceId === face.face_idx ? `0 0 25px 2px ${color}` : `0 0 10px ${color}`),
+                        zIndex: hoveredFaceId === face.face_idx ? 100 : 1
+                      }}
+                    >
+                      <span className={isSimulating && simulatedProgress < 70 ? 'label-analyzing' : ''} style={{
+                        backgroundColor: isUnknown && (!isSimulating || simulatedProgress >= 70) ? '#000000' : 'rgba(15, 23, 42, 0.85)',
+                        color: (isSimulating && simulatedProgress < 70) ? '#e2e8f0' : color,
+                        border: `1px solid ${(isSimulating && simulatedProgress < 70) ? '#64748b' : color}`
+                      }}>
+                        {(isSimulating && simulatedProgress < 70) ? (
+                          <>Analyzing...</>
+                        ) : isUnknown ? (
+                          <><HelpCircle size={12} className="inline-icon" /> UNKNOWN - {face.emotion}</>
+                        ) : (
+                          <><User size={12} className="inline-icon" /> {face.name} - {face.emotion}</>
+                        )}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="premium-empty-state">
+                <StatusCard 
+                  icon={CloudUpload} 
+                  title="No Image Selected" 
+                  subtitle="Upload a JPG or PNG to begin AI processing." 
+                />
+              </div>
+            )}
+          </div>
+          <button className="primary-btn" onClick={runPrediction} disabled={loading || !file} style={{ width: '100%', padding: '0.8rem' }}>
+            {loading ? (
+              <>
+                <Zap size={18} className="pulse" />
+                Processing...
+              </>
+            ) : (
+              <>
+                <Cpu size={18} />
+                Detect Face & Emotion
+              </>
+            )}
           </button>
         </article>
 
         <article className="glass-card result-panel">
-          <h3>Results</h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+             <h3 style={{ fontSize: '1.1rem' }}>AI Analysis Results</h3>
+             {result && !isSimulating && (
+                <span className="badge" style={{ background: 'rgba(74, 222, 128, 0.1)', color: 'var(--success)', border: '1px solid rgba(74, 222, 128, 0.2)' }}>
+                  COMPLETED
+                </span>
+             )}
+          </div>
 
           {isSimulating && (
-            <div className="processing-status-container">
-              <div className="status-text">{statusText}</div>
-              <div className="progress-bar-bg">
-                <div className="progress-bar-fill" style={{ width: `${simulatedProgress}%` }}></div>
+            <div className="processing-status-container fade-in" style={{ marginBottom: '1.5rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <span className="status-text kicker" style={{ color: 'var(--accent-blue)' }}>{statusText}</span>
+                <span className="status-text kicker">{simulatedProgress}%</span>
+              </div>
+              <div className="progress-bar-bg" style={{ height: '6px', borderRadius: '3px' }}>
+                <div className="progress-bar-fill shimmer-bg" style={{ width: `${simulatedProgress}%`, height: '100%', borderRadius: '3px' }}></div>
               </div>
             </div>
           )}
 
-          {error && <p className="error">{error}</p>}
+          {error && (
+            <div className="fade-in" style={{ padding: '1rem 0' }}>
+               <StatusCard 
+                 icon={Zap} 
+                 title="System Notice" 
+                 subtitle={error} 
+                 variant="warning"
+               />
+            </div>
+          )}
 
           {isSimulating && simulatedProgress >= 30 && !result && (
             <div className="results-list">
+              <SkeletonCard />
               <SkeletonCard />
               <SkeletonCard />
             </div>
           )}
 
           {!isSimulating && !error && result && result.results.length === 0 && (
-            <p className="warning">No face detected in the selected image.</p>
+            <div className="premium-empty-state">
+              <StatusCard 
+                icon={User} 
+                title="Zero Matches" 
+                subtitle="The AI detector could not identify any clear faces in this image." 
+                variant="warning"
+              />
+            </div>
           )}
 
           {!isSimulating && !error && result && result.results.length > 0 && (
             <div className="results-list">
-              <div className="badge-row fade-in">
+              <div className="badge-row fade-in" style={{ marginBottom: '1rem' }}>
                 <span className="badge">Faces: {result.n_faces}</span>
                 <span className="badge">Identified: {result.n_identified}</span>
                 <span className="badge">Unknown: {result.n_faces - result.n_identified}</span>
@@ -807,13 +914,16 @@ function UploadPage() {
                   <>
                     {known.length > 0 && (
                       <div className="result-section known-section fade-in">
-                        <h4 className="section-title">Known Individuals</h4>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                           <User size={16} style={{ color: 'var(--success)' }} />
+                           <h4 className="section-title">Verified Members</h4>
+                        </div>
                         <div className="section-divider known-divider"></div>
                         {known.map((face, idx) => (
-                          <FaceCard 
-                            key={`known-${face.face_idx}`} 
-                            face={face} 
-                            delay={idx * 0.1} 
+                          <FaceCard
+                            key={`known-${face.face_idx}`}
+                            face={face}
+                            delay={idx * 0.1}
                             onHover={setHoveredFaceId}
                             isHighlighted={hoveredFaceId === face.face_idx}
                           />
@@ -822,13 +932,16 @@ function UploadPage() {
                     )}
                     {unknown.length > 0 && (
                       <div className="result-section unknown-section fade-in" style={{ marginTop: known.length > 0 ? '1.5rem' : '0' }}>
-                        <h4 className="section-title">Unknown Individuals</h4>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                           <HelpCircle size={16} style={{ color: 'var(--danger)' }} />
+                           <h4 className="section-title">Unknown Subjects</h4>
+                        </div>
                         <div className="section-divider unknown-divider"></div>
                         {unknown.map((face, idx) => (
-                          <FaceCard 
-                            key={`unknown-${face.face_idx}`} 
-                            face={face} 
-                            delay={idx * 0.1} 
+                          <FaceCard
+                            key={`unknown-${face.face_idx}`}
+                            face={face}
+                            delay={idx * 0.1}
                             onHover={setHoveredFaceId}
                             isHighlighted={hoveredFaceId === face.face_idx}
                           />
@@ -842,7 +955,13 @@ function UploadPage() {
           )}
 
           {!isSimulating && !error && !result && (
-            <p className="muted">Prediction output appears here after processing.</p>
+            <div className="premium-empty-state">
+               <StatusCard 
+                icon={Cpu} 
+                title="Ready for Analysis" 
+                subtitle="Upload an image and click the button to trigger AI face & emotion detection." 
+              />
+            </div>
           )}
         </article>
       </div>
@@ -1101,9 +1220,9 @@ function LivePage() {
                         {(isSimulating && simulatedProgress < 70) ? (
                           <>Analyzing...</>
                         ) : isUnknown ? (
-                          <><HelpCircle size={12} className="inline-icon" /> UNKNOWN - {face.emotion === 'uncertain' ? '?' : face.emotion}</>
+                          <><HelpCircle size={12} className="inline-icon" /> UNKNOWN - {face.emotion}</>
                         ) : (
-                          <><User size={12} className="inline-icon" /> {face.name} - {face.emotion === 'uncertain' ? '?' : face.emotion}</>
+                          <><User size={12} className="inline-icon" /> {face.name} - {face.emotion}</>
                         )}
                       </span>
                     </div>
@@ -1145,9 +1264,9 @@ function LivePage() {
                         border: `1px solid ${color}`
                       }}>
                         {isUnknown ? (
-                          <><HelpCircle size={12} className="inline-icon" /> UNKNOWN - {face.emotion === 'uncertain' ? '?' : face.emotion}</>
+                          <><HelpCircle size={12} className="inline-icon" /> UNKNOWN - {face.emotion}</>
                         ) : (
-                          <><User size={12} className="inline-icon" /> {face.name} - {face.emotion === 'uncertain' ? '?' : face.emotion}</>
+                          <><User size={12} className="inline-icon" /> {face.name} - {face.emotion}</>
                         )}
                       </span>
                     </div>
@@ -1171,8 +1290,8 @@ function LivePage() {
                 <CameraOff size={16} /> Stop Camera
               </button>
             )}
-            <button 
-              className="primary-btn" 
+            <button
+              className="primary-btn"
               style={{ marginLeft: 'auto' }}
               disabled={!streaming || isSnapshotMode}
               onClick={takeSnapshot}
@@ -1221,10 +1340,10 @@ function LivePage() {
                             <h4 className="section-title">Known Individuals</h4>
                             <div className="section-divider known-divider"></div>
                             {known.map((face, idx) => (
-                              <FaceCard 
-                                key={`snap-known-${face.face_idx}`} 
-                                face={face} 
-                                delay={idx * 0.1} 
+                              <FaceCard
+                                key={`snap-known-${face.face_idx}`}
+                                face={face}
+                                delay={idx * 0.1}
                                 onHover={setHoveredFaceId}
                                 isHighlighted={hoveredFaceId === face.face_idx}
                               />
@@ -1236,10 +1355,10 @@ function LivePage() {
                             <h4 className="section-title">Unknown Individuals</h4>
                             <div className="section-divider unknown-divider"></div>
                             {unknown.map((face, idx) => (
-                              <FaceCard 
-                                key={`snap-unknown-${face.face_idx}`} 
-                                face={face} 
-                                delay={idx * 0.1} 
+                              <FaceCard
+                                key={`snap-unknown-${face.face_idx}`}
+                                face={face}
+                                delay={idx * 0.1}
                                 onHover={setHoveredFaceId}
                                 isHighlighted={hoveredFaceId === face.face_idx}
                               />
@@ -1263,10 +1382,10 @@ function LivePage() {
                   <p className="muted">No active faces detected yet.</p>
                 )}
                 {detectedFaces.map((face, idx) => (
-                  <FaceCard 
-                    key={`feed-${face.id}`} 
-                    face={face} 
-                    delay={idx * 0.1} 
+                  <FaceCard
+                    key={`feed-${face.id}`}
+                    face={face}
+                    delay={idx * 0.1}
                     onHover={setHoveredFaceId}
                     isHighlighted={hoveredFaceId === face.id}
                   />

@@ -1,14 +1,17 @@
 :root {
   --bg: #0f172a;
   --bg-soft: #111f3a;
-  --card: rgba(15, 23, 42, 0.62);
-  --card-border: rgba(148, 163, 184, 0.2);
-  --text: #e2e8f0;
+  --card: rgba(15, 23, 42, 0.65);
+  --card-border: rgba(148, 163, 184, 0.15);
+  --text: #f8fafc;
   --muted: #94a3b8;
   --accent-blue: #3b82f6;
   --accent-purple: #8b5cf6;
+  --neon-cyan: #22d3ee;
+  --neon-indigo: #818cf8;
   --danger: #fb7185;
   --warning: #facc15;
+  --success: #4ade80;
 }
 
 * {
@@ -43,11 +46,13 @@ a {
 
 .glass-card {
   border: 1px solid var(--card-border);
-  background: var(--card);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-radius: 1rem;
-  box-shadow: 0 12px 35px rgba(2, 6, 23, 0.45);
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.45), rgba(15, 23, 42, 0.65));
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-radius: 1.25rem;
+  box-shadow: 
+    0 4px 24px -1px rgba(0, 0, 0, 0.3),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05);
 }
 
 .topbar {
@@ -192,10 +197,19 @@ h1 {
   margin-top: 0.8rem;
   color: #fff;
   background: linear-gradient(130deg, var(--accent-blue), var(--accent-purple));
+  box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
 }
 
-.primary-btn:hover {
-  filter: brightness(1.09);
+.primary-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  filter: brightness(1.1);
+  box-shadow: 0 8px 25px rgba(59, 130, 246, 0.45);
+}
+
+.primary-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  filter: grayscale(0.5);
 }
 
 .secondary-btn {
@@ -213,17 +227,48 @@ h1 {
 }
 
 .upload-zone {
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   text-align: center;
-  gap: 0.65rem;
-  padding: 1.5rem;
-  border-style: dashed;
+  gap: 1rem;
+  padding: 3rem 2rem;
+  border: 2px dashed var(--card-border);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+
+.upload-zone:hover {
+  border-color: var(--accent-blue);
+  background: rgba(59, 130, 246, 0.04);
 }
 
 .upload-zone.drag-active {
-  border-color: rgba(59, 130, 246, 0.7);
-  background: rgba(59, 130, 246, 0.09);
+  border-color: var(--neon-cyan);
+  background: rgba(34, 211, 238, 0.08);
+  transform: scale(1.005);
+  box-shadow: 0 0 30px rgba(34, 211, 238, 0.15);
+}
+
+.upload-icon-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.5rem;
+}
+
+.upload-glow {
+  position: absolute;
+  width: 80px;
+  height: 80px;
+  background: radial-gradient(circle, var(--accent-blue), transparent 70%);
+  opacity: 0.15;
+  filter: blur(10px);
+  animation: pulse-glow 3s infinite;
 }
 
 .upload-layout {
@@ -632,16 +677,73 @@ h1 {
   }
 }
 
-@keyframes pulse {
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.15; transform: scale(1); }
+  50% { opacity: 0.3; transform: scale(1.2); }
+}
 
-  0%,
-  100% {
-    opacity: 0.6;
-  }
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
 
-  50% {
-    opacity: 1;
-  }
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.shimmer-bg {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.05) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite linear;
+}
+
+.premium-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 2rem;
+  text-align: center;
+  gap: 1.25rem;
+}
+
+.status-card {
+  background: rgba(30, 41, 59, 0.4);
+  padding: 1.5rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.status-icon-ring {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(59, 130, 246, 0.1);
+  display: grid;
+  place-items: center;
+  color: var(--accent-blue);
+  position: relative;
+}
+
+.status-icon-ring::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border: 1px solid var(--accent-blue);
+  border-radius: 50%;
+  opacity: 0.4;
+  animation: pulse 2s infinite;
 }
 
 .dual-legend {
