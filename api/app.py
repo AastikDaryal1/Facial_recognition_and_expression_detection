@@ -5,11 +5,20 @@ FastAPI REST server — production deployment interface.
 
 Endpoints
 ---------
-GET  /health                  → liveness check
-GET  /model/info              → loaded model metadata
-POST /predict/image           → analyse an uploaded image file
-POST /predict/base64          → analyse a base64-encoded image
-GET  /metrics                 → basic request/latency metrics
+GET  /health                  → liveness check (public)
+GET  /model/info              → loaded model metadata (any logged-in user)
+POST /predict/image           → analyse an uploaded image file (any logged-in user)
+POST /predict/base64          → analyse a base64-encoded image (any logged-in user)
+GET  /metrics                 → basic request/latency metrics (super_admin only)
+
+Auth
+----
+POST /auth/signup             → create first super_admin account (one-time)
+POST /auth/login              → returns access + refresh tokens
+POST /auth/refresh            → rotate access token
+POST /auth/logout             → blacklists current token
+POST /auth/invite             → org_admin / super_admin issues an invite token
+POST /auth/signup-invite      → register using an invite token
 
 Usage
 -----
@@ -19,28 +28,28 @@ Usage
 
 
 import base64
-import io
 import time
 import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
-import cv2
-import numpy as np
-from fastapi import FastAPI, File, HTTPException, UploadFile, status, Security, Depends, Request
+from fastapi import FastAPI, File, HTTPException, UploadFile, status, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-from config.settings import API_HOST, API_PORT, API_WORKERS, API_KEY, MAX_UPLOAD_SIZE_MB, RATE_LIMIT
+from config.settings import API_HOST, API_PORT, API_WORKERS, MAX_UPLOAD_SIZE_MB, RATE_LIMIT
 from models.face_model import FaceRecognizer
 from pipelines.inference import run as inference_run
 from utils.logger import get_logger
+from api.auth.router import router as auth_router
+from api.dependencies import get_current_user, require_role
+from api.models import User
+from db.base import engine, Base
 
 log = get_logger(__name__)
 
@@ -57,7 +66,14 @@ _state: dict = {
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load model artefacts once on startup; release on shutdown."""
+    """Create DB tables, load model artefacts once on startup; release on shutdown."""
+
+    # ── Database ──────────────────────────────────────────────────────────────
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    log.info("Database tables verified ✅")
+
+    # ── Model ─────────────────────────────────────────────────────────────────
     log.info("API startup — loading model artefacts …")
     _state["startup_time"] = time.time()
     if FaceRecognizer.is_available():
@@ -73,16 +89,6 @@ async def lifespan(app: FastAPI):
 # App
 # ─────────────────────────────────────────────────────────────────────────────
 limiter = Limiter(key_func=get_remote_address)
-
-_api_key_header = APIKeyHeader(name="X-API-Key")
-
-def get_api_key(api_key_header: str = Security(_api_key_header)):
-    if api_key_header != API_KEY:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid API Key",
-        )
-    return api_key_header
 
 app = FastAPI(
     title       = "Face & Emotion Detection API",
@@ -101,7 +107,18 @@ app.add_middleware(
     allow_headers  = ["*"],
 )
 
-
+# ── Auth router ──────────────────────────────────────────────────────────────
+app.include_router(auth_router, prefix="/auth", tags=["Auth"])
+from api.routers.users import router as users_router
+app.include_router(users_router, prefix="/users", tags=["Users"])
+from api.routers.organisations import router as orgs_router
+app.include_router(orgs_router, prefix="/organisations", tags=["Organisations"])
+from api.routers.persons import router as persons_router
+app.include_router(persons_router, prefix="/persons", tags=["Persons"])
+from api.routers.sessions import router as sessions_router
+app.include_router(sessions_router, prefix="/sessions", tags=["Sessions"])
+from api.routers.audit import router as audit_router
+app.include_router(audit_router, prefix="/audit", tags=["Audit"])
 # ─────────────────────────────────────────────────────────────────────────────
 # Pydantic models
 # ─────────────────────────────────────────────────────────────────────────────
@@ -141,7 +158,7 @@ class MetricsResponse(BaseModel):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Helper
+# Helpers
 # ─────────────────────────────────────────────────────────────────────────────
 def _require_model() -> FaceRecognizer:
     if _state["recognizer"] is None:
@@ -160,10 +177,10 @@ def _run_inference(image_bytes: bytes, filename: str, save_annotated: bool = Tru
         tmp_path = tmp.name
     try:
         return inference_run(
-            image_path    = tmp_path,
-            output_dir    = "data/output/api",
-            recognizer    = _state["recognizer"],
-            save_annotated= save_annotated,
+            image_path     = tmp_path,
+            output_dir     = "data/output/api",
+            recognizer     = _state["recognizer"],
+            save_annotated = save_annotated,
         )
     finally:
         Path(tmp_path).unlink(missing_ok=True)
@@ -175,7 +192,7 @@ def _run_inference(image_bytes: bytes, filename: str, save_annotated: bool = Tru
 
 @app.get("/health", response_model=HealthResponse, tags=["System"])
 async def health():
-    """Liveness probe — always responds 200 while the process is alive."""
+    """Liveness probe — always responds 200 while the process is alive. No auth required."""
     uptime = time.time() - (_state["startup_time"] or time.time())
     return HealthResponse(
         status       = "ok",
@@ -186,7 +203,10 @@ async def health():
 
 @app.get("/model/info", tags=["System"])
 @limiter.limit(RATE_LIMIT)
-async def model_info(request: Request, api_key: str = Security(get_api_key)):
+async def model_info(
+    request      : Request,
+    current_user : User = Depends(get_current_user),   # any logged-in user
+):
     """Return metadata about the loaded model."""
     rec = _require_model()
     return {
@@ -199,7 +219,10 @@ async def model_info(request: Request, api_key: str = Security(get_api_key)):
 
 @app.get("/metrics", response_model=MetricsResponse, tags=["System"])
 @limiter.limit(RATE_LIMIT)
-async def metrics(request: Request, api_key: str = Security(get_api_key)):
+async def metrics(
+    request      : Request,
+    current_user : User = Depends(require_role(["super_admin"])),  # super_admin only
+):
     """Return basic request-count and average-latency metrics."""
     count  = _state["request_count"]
     total  = _state["total_latency"]
@@ -219,9 +242,9 @@ async def metrics(request: Request, api_key: str = Security(get_api_key)):
 )
 @limiter.limit(RATE_LIMIT)
 async def predict_image(
-    request: Request,
-    file: UploadFile = File(...),
-    api_key: str = Security(get_api_key)
+    request      : Request,
+    file         : UploadFile = File(...),
+    current_user : User = Depends(get_current_user),   # any logged-in user
 ):
     """
     Upload a JPEG/PNG image.
@@ -253,7 +276,6 @@ async def predict_image(
     _state["request_count"] += 1
     _state["total_latency"]  += elapsed
 
-    # Encode annotated image to base64 for frontend preview
     annotated_b64 = None
     if result.get("output_path"):
         try:
@@ -279,9 +301,9 @@ async def predict_image(
 )
 @limiter.limit(RATE_LIMIT)
 async def predict_base64(
-    request: Request,
-    payload: Base64Request,
-    api_key: str = Security(get_api_key)
+    request      : Request,
+    payload      : Base64Request,
+    current_user : User = Depends(get_current_user),   # any logged-in user
 ):
     """
     Send a base64-encoded image string.

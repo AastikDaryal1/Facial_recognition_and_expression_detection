@@ -27,8 +27,8 @@ ENV       = os.getenv("ENV", "development")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
 # ── Google Cloud Storage ──────────────────────────────────────────────────────
-GCS_PROJECT_ID = os.getenv("GCS_PROJECT_ID", "united-monument-388200")
-GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "face-emotion-dataset")
+GCS_PROJECT_ID = os.getenv("GCS_PROJECT_ID", "")
+GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "")
 GCS_KEY_PATH   = os.getenv("GCS_KEY_PATH", "secrets/gcs_key.json")
 
 # Remote paths inside the bucket
@@ -125,8 +125,20 @@ default_api_workers = "1" if os.name == "nt" else "2"
 API_WORKERS = int(os.getenv("API_WORKERS", default_api_workers))
 
 # ── Security ──────────────────────────────────────────────────────────────────
-API_KEY             = os.getenv("API_KEY", "change_me_in_production")
+API_KEY             = os.getenv("API_KEY", "")
 MAX_UPLOAD_SIZE_MB  = int(os.getenv("MAX_UPLOAD_SIZE_MB", "5"))
 MAX_RUNTIME_MINUTES = int(os.getenv("MAX_RUNTIME_MINUTES", "10"))
 RATE_LIMIT          = os.getenv("RATE_LIMIT", "10/minute")
 LOW_LIGHT_THRESHOLD = int(os.getenv("LOW_LIGHT_THRESHOLD", "40"))
+
+# ── Database ──────────────────────────────────────────────────────────────────
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://faceapp:faceapp_pass@localhost:5432/face_emotion_db")
+
+# ── Redis ─────────────────────────────────────────────────────────────────────
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+
+# ── JWT ───────────────────────────────────────────────────────────────────────
+JWT_SECRET_KEY            = os.getenv("JWT_SECRET_KEY")   # must be set in .env — no fallback
+JWT_ALGORITHM             = "HS256"
+JWT_EXPIRE_MINUTES        = int(os.getenv("JWT_EXPIRE_MINUTES", "1440"))
+REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
