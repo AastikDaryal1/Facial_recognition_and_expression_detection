@@ -20,6 +20,7 @@ import {
   Upload,
   Camera,
   Home,
+  ClipboardList,
 } from 'lucide-react'
 import { useAuth } from '../AuthContext'
 
@@ -36,9 +37,10 @@ const NAV_ITEMS = {
     { to: '/live',          label: 'Live',      icon: Camera },
   ],
   user: [
-    { to: '/',       label: 'Home',   icon: Home   },
-    { to: '/upload', label: 'Upload', icon: Upload },
-    { to: '/live',   label: 'Live',   icon: Camera },
+    { to: '/',         label: 'Home',     icon: Home          },
+    { to: '/upload',   label: 'Upload',   icon: Upload        },
+    { to: '/live',     label: 'Live',     icon: Camera        },
+    { to: '/sessions', label: 'Sessions', icon: ClipboardList },
   ],
 }
 

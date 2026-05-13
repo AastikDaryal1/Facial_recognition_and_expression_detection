@@ -45,16 +45,18 @@ export default function HomePage() {
   const [members, setMembers] = useState([])
 
   useEffect(() => {
-    // Fetch metrics
-    fetchMetrics()
-      .then(data => {
-        setStats({
-          uptime  : `${data.uptime_s || 0}s`,
-          latency : `${data.avg_latency_s || 0}s`,
-          count   : data.request_count || 0,
+    // fetchMetrics is super_admin only — skip for regular users to avoid 403
+    if (user?.role === 'super_admin') {
+      fetchMetrics()
+        .then(data => {
+          setStats({
+            uptime  : `${data.uptime_s || 0}s`,
+            latency : `${data.avg_latency_s || 0}s`,
+            count   : data.request_count || 0,
+          })
         })
-      })
-      .catch(() => {})
+        .catch(() => {})
+    }
 
     // Fetch model info
     fetchModelInfo()

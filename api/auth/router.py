@@ -61,23 +61,24 @@ async def signup(payload: SignupRequest, db: AsyncSession = Depends(get_db)):
     if existing_email:
         raise HTTPException(400, "Email already registered.")
 
-    org = Organisation(name=payload.org_name)
-    db.add(org)
-    await db.flush()   # get org.id before committing
+    try:
+        org = Organisation(name=payload.org_name)
+        db.add(org)
+        await db.flush()   # get org.id before committing
 
-    user = User(
-        email         = payload.email,
-        password_hash = hash_password(payload.password),
-        role          = UserRole.super_admin,
-        org_id        = org.id,
-    )
-    db.add(user)
-    await write_audit_log(
-        db=db, actor_id=user.id, org_id=org.id,
-        action="auth.signup",
-        target_type="user", target_id=str(user.id),
-        detail={"email": user.email, "role": user.role.value},
-    )
+        user = User(
+            email         = payload.email,
+            password_hash = hash_password(payload.password),
+            role          = UserRole.super_admin,
+            org_id        = org.id,
+        )
+        db.add(user)
+        await write_audit_log(
+            db=db, actor_id=user.id, org_id=org.id,
+            action="auth.signup",
+            target_type="user", target_id=str(user.id),
+            detail={"email": user.email, "role": user.role.value},
+        )
         await db.commit()
         await db.refresh(user)
 
@@ -234,17 +235,22 @@ async def signup_invite(payload: InviteSignupRequest, db: AsyncSession = Depends
             org_id        = uuid.UUID(invite["org_id"]) if invite.get("org_id") else None,
             invited_by    = uuid.UUID(invite["sub"]) if invite.get("sub") else None,
         )
-    db.add(user)
-    await write_audit_log(
-        db=db, actor_id=user.id, org_id=user.org_id,
-        action="auth.invite_accept",
-        target_type="user", target_id=str(user.id),
-        detail={"email": user.email, "role": user.role.value, "invited_by": invite["sub"]},
-    )
-    await db.commit()
-    await db.refresh(user)
+        db.add(user)
+        await write_audit_log(
+            db=db, actor_id=user.id, org_id=user.org_id,
+            action="auth.invite_accept",
+            target_type="user", target_id=str(user.id),
+            detail={"email": user.email, "role": user.role.value, "invited_by": invite["sub"]},
+        )
+        await db.commit()
+        await db.refresh(user)
 
-    return TokenResponse(
-        access_token  = create_access_token(str(user.id), user.role.value, str(user.org_id)),
-        refresh_token = create_refresh_token(str(user.id)),
-    )
+        return TokenResponse(
+            access_token  = create_access_token(str(user.id), user.role.value, str(user.org_id)),
+            refresh_token = create_refresh_token(str(user.id)),
+        )
+    except Exception as e:
+        print("SIGNUP-INVITE ERROR TRACEBACK:")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(500, f"Signup-invite failed: {str(e)}")

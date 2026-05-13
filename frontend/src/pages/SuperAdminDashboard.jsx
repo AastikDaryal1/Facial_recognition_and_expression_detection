@@ -139,8 +139,17 @@ export default function SuperAdminDashboard() {
     try { await deleteUser(id); load() } catch (e) { setError(e.message) }
   }
 
-  const handleRoleChange = async (id, role) => {
-    try { await changeUserRole(id, role); load() } catch (e) { setError(e.message) }
+  const handleRoleChange = async (id, newRole, currentRole) => {
+    const roleLabel = { org_admin: 'Org Admin', user: 'User' }
+    const confirmed = window.confirm(
+      `Change this user's role from "${roleLabel[currentRole]}" to "${roleLabel[newRole]}"?\n\nThis will affect their permissions immediately.`
+    )
+    if (!confirmed) {
+      // Re-render to reset dropdown to original value
+      load()
+      return
+    }
+    try { await changeUserRole(id, newRole); load() } catch (e) { setError(e.message) }
   }
 
   return (
@@ -331,7 +340,8 @@ export default function SuperAdminDashboard() {
                   {u.role !== 'super_admin' && u.email !== user?.email && (
                     <select
                       value={u.role}
-                      onChange={(e) => handleRoleChange(u.id, e.target.value)}
+                      onChange={(e) => handleRoleChange(u.id, e.target.value, u.role)}
+                      title="Change role — requires confirmation"
                       style={{
                         background: 'rgba(30,41,59,0.8)', border: '1px solid rgba(71,85,105,0.5)',
                         borderRadius: '6px', padding: '0.3rem 0.5rem', color: '#f1f5f9', fontSize: '0.8rem', cursor: 'pointer',

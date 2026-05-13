@@ -391,6 +391,16 @@ export async function deleteSession(sessionId) {
   if (!res.ok) throw new Error('Failed to delete session.')
 }
 
+export async function updateSessionNote(sessionId, note) {
+  const res = await apiFetch(`/sessions/${sessionId}/note`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ note }),
+  })
+  if (!res.ok) throw new Error('Failed to update session note.')
+  return res.json()
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Audit logs endpoints
 // ─────────────────────────────────────────────────────────────────────────────

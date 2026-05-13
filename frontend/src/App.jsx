@@ -33,6 +33,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 import HomePage from './pages/HomePage'
 import UploadPage from './pages/UploadPage'
 import LivePage from './pages/LivePage'
+import UserSessionsPage from './pages/UserSessionsPage'
 
 // App shell (navbar + layout) — kept exactly as before
 import AppShell from './components/AppShell'
@@ -105,6 +106,16 @@ function AppRoutes() {
           <ProtectedRoute>
             <AppShell>
               <LivePage />
+            </AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/sessions"
+        element={
+          <ProtectedRoute>
+            <AppShell>
+              <UserSessionsPage />
             </AppShell>
           </ProtectedRoute>
         }

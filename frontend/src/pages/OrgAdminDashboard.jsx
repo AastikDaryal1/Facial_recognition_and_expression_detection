@@ -16,7 +16,7 @@ import { useAuth } from '../AuthContext'
 import {
   fetchUsers, deactivateUser, activateUser,
   fetchPersons, createPerson, deletePerson,
-  fetchSessions, deleteSession,
+  fetchSessions, deleteSession, updateSessionNote,
   inviteUser,
 } from '../api'
 
@@ -75,6 +75,12 @@ export default function OrgAdminDashboard() {
   const [inviteResult, setInviteResult] = useState(null)
   const [inviting, setInviting] = useState(false)
 
+  // Session expand + note editing
+  const [expandedSession, setExpandedSession] = useState(null)
+  const [editingNoteId, setEditingNoteId] = useState(null)
+  const [noteText, setNoteText] = useState('')
+  const [savingNote, setSavingNote] = useState(false)
+
   // New person modal
   const [showNewPerson, setShowNewPerson] = useState(false)
   const [personName, setPersonName] = useState('')
@@ -85,10 +91,22 @@ export default function OrgAdminDashboard() {
   const load = async () => {
     setLoading(true); setError('')
     try {
-      const [u, p, s] = await Promise.all([
+      const [uRes, pRes, sRes] = await Promise.allSettled([
         fetchUsers(), fetchPersons(), fetchSessions()
       ])
-      setUsers(u); setPersons(p); setSessions(s)
+      if (uRes.status === 'fulfilled') setUsers(uRes.value)
+      else console.error('fetchUsers failed:', uRes.reason)
+
+      if (pRes.status === 'fulfilled') setPersons(pRes.value)
+      else console.error('fetchPersons failed:', pRes.reason)
+
+      if (sRes.status === 'fulfilled') setSessions(sRes.value)
+      else console.error('fetchSessions failed:', sRes.reason)
+
+      // Only show error banner if ALL three failed (total outage)
+      const allFailed = [uRes, pRes, sRes].every(r => r.status === 'rejected')
+      if (allFailed) setError('Failed to connect to the server. Is the backend running?')
+
     } catch (e) { setError(e.message) }
     setLoading(false)
   }
@@ -136,6 +154,16 @@ export default function OrgAdminDashboard() {
   const handleDeletePerson = async (id) => {
     if (!window.confirm('Remove this person from the enrolment list?')) return
     try { await deletePerson(id); load() } catch (e) { setError(e.message) }
+  }
+
+  const handleSaveNote = async (sessionId) => {
+    setSavingNote(true)
+    try {
+      const updated = await updateSessionNote(sessionId, noteText)
+      setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, note: updated.note } : s))
+      setEditingNoteId(null)
+    } catch (e) { setError(e.message) }
+    setSavingNote(false)
   }
 
   const handleDeleteSession = async (id) => {
@@ -354,28 +382,220 @@ export default function OrgAdminDashboard() {
               ? <p style={{ color: '#64748b' }}>No sessions yet. Sessions will appear here after face detection runs.</p>
               : (
                 <div style={{ display: 'grid', gap: '0.75rem' }}>
-                  {sessions.map(s => (
-                    <div key={s.id} style={{
-                      background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(71,85,105,0.3)',
-                      borderRadius: '10px', padding: '1rem 1.25rem',
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem',
-                    }}>
-                      <div style={{ flex: 1 }}>
-                        <p style={{ margin: 0, fontWeight: 600, fontSize: '0.9rem' }}>
-                          {s.n_faces} face{s.n_faces !== 1 ? 's' : ''} detected — {s.n_identified} identified
-                        </p>
-                        <p style={{ margin: '0.2rem 0 0', color: '#64748b', fontSize: '0.78rem' }}>
-                          {s.created_at ? new Date(s.created_at).toLocaleString() : ''} · {s.elapsed_s}s
-                        </p>
-                      </div>
-                      <button onClick={() => handleDeleteSession(s.id)} style={{
-                        background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
-                        borderRadius: '6px', padding: '0.3rem 0.5rem', color: '#f87171', cursor: 'pointer',
+                  {sessions.map(s => {
+                    const isExpanded = expandedSession === s.id
+                    const isEditingNote = editingNoteId === s.id
+                    const results = s.results_json?.results || (Array.isArray(s.results_json) ? s.results_json : [])
+                    const known = results.filter(f => f.name && f.name.toUpperCase() !== 'UNKNOWN')
+                    const unknown = results.filter(f => !f.name || f.name.toUpperCase() === 'UNKNOWN')
+
+                    return (
+                      <div key={s.id} style={{
+                        background: 'rgba(15,23,42,0.6)', border: `1px solid ${isExpanded ? 'rgba(99,102,241,0.4)' : 'rgba(71,85,105,0.3)'}`,
+                        borderRadius: '10px', overflow: 'hidden',
+                        transition: 'border-color 0.2s',
                       }}>
-                        <X size={14} />
-                      </button>
-                    </div>
-                  ))}
+                        {/* ── Session header row ── */}
+                        <div style={{
+                          padding: '1rem 1.25rem',
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem',
+                        }}>
+                          <div style={{ flex: 1 }}>
+                            <p style={{ margin: 0, fontWeight: 600, fontSize: '0.9rem' }}>
+                              {s.n_faces} face{s.n_faces !== 1 ? 's' : ''} detected
+                              <span style={{ color: '#34d399', marginLeft: '0.5rem' }}>· {s.n_identified} identified</span>
+                              {s.n_faces - s.n_identified > 0 && (
+                                <span style={{ color: '#f87171', marginLeft: '0.5rem' }}>· {s.n_faces - s.n_identified} unknown</span>
+                              )}
+                            </p>
+                            <p style={{ margin: '0.2rem 0 0', color: '#64748b', fontSize: '0.78rem' }}>
+                              {s.created_at ? new Date(s.created_at).toLocaleString() : ''} · {s.elapsed_s}s
+                              {s.note && <span style={{ marginLeft: '0.75rem', color: '#a5b4fc' }}>📝 {s.note}</span>}
+                            </p>
+                          </div>
+
+                          {/* Action buttons */}
+                          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                            {/* Expand / collapse */}
+                            <button
+                              onClick={() => setExpandedSession(isExpanded ? null : s.id)}
+                              title={isExpanded ? 'Collapse' : 'View Details'}
+                              style={{
+                                background: isExpanded ? 'rgba(99,102,241,0.2)' : 'rgba(71,85,105,0.15)',
+                                border: `1px solid ${isExpanded ? 'rgba(99,102,241,0.4)' : 'rgba(71,85,105,0.3)'}`,
+                                borderRadius: '6px', padding: '0.3rem 0.6rem',
+                                color: isExpanded ? '#a5b4fc' : '#94a3b8', cursor: 'pointer',
+                                fontSize: '0.75rem', fontWeight: 600,
+                              }}
+                            >
+                              {isExpanded ? '▲ Hide' : '▼ Details'}
+                            </button>
+                            {/* Edit note */}
+                            <button
+                              onClick={() => { setEditingNoteId(s.id); setNoteText(s.note || '') }}
+                              title="Add / Edit Note"
+                              style={{
+                                background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)',
+                                borderRadius: '6px', padding: '0.3rem 0.5rem', color: '#a5b4fc', cursor: 'pointer',
+                              }}
+                            >
+                              📝
+                            </button>
+                            {/* Delete */}
+                            <button
+                              onClick={() => handleDeleteSession(s.id)}
+                              title="Delete Session"
+                              style={{
+                                background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+                                borderRadius: '6px', padding: '0.3rem 0.5rem', color: '#f87171', cursor: 'pointer',
+                              }}
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* ── Note editor ── */}
+                        {isEditingNote && (
+                          <div style={{
+                            padding: '0 1.25rem 1rem',
+                            borderTop: '1px solid rgba(71,85,105,0.2)',
+                          }}>
+                            <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.8rem', margin: '0.75rem 0 0.4rem' }}>
+                              Session Note
+                            </label>
+                            <textarea
+                              value={noteText}
+                              onChange={e => setNoteText(e.target.value)}
+                              placeholder="Add a note about this session..."
+                              rows={3}
+                              style={{
+                                width: '100%', background: 'rgba(30,41,59,0.8)',
+                                border: '1px solid rgba(99,102,241,0.4)', borderRadius: '8px',
+                                padding: '0.6rem', color: '#f1f5f9', fontSize: '0.85rem',
+                                outline: 'none', resize: 'vertical', boxSizing: 'border-box',
+                              }}
+                            />
+                            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                              <button
+                                onClick={() => handleSaveNote(s.id)}
+                                disabled={savingNote}
+                                style={{
+                                  background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                                  border: 'none', borderRadius: '6px', padding: '0.45rem 1rem',
+                                  color: '#fff', fontWeight: 600, fontSize: '0.8rem',
+                                  cursor: savingNote ? 'not-allowed' : 'pointer', opacity: savingNote ? 0.7 : 1,
+                                }}
+                              >
+                                {savingNote ? 'Saving...' : 'Save Note'}
+                              </button>
+                              <button
+                                onClick={() => setEditingNoteId(null)}
+                                style={{
+                                  background: 'rgba(71,85,105,0.2)', border: '1px solid rgba(71,85,105,0.3)',
+                                  borderRadius: '6px', padding: '0.45rem 1rem',
+                                  color: '#94a3b8', fontSize: '0.8rem', cursor: 'pointer',
+                                }}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* ── Expanded detail: results_json ── */}
+                        {isExpanded && (
+                          <div style={{
+                            borderTop: '1px solid rgba(71,85,105,0.25)',
+                            padding: '1rem 1.25rem',
+                            background: 'rgba(15,23,42,0.4)',
+                          }}>
+                            {results.length === 0 ? (
+                              <p style={{ color: '#64748b', fontSize: '0.85rem', margin: 0 }}>No detailed results stored for this session.</p>
+                            ) : (
+                              <>
+                                {/* Summary pills */}
+                                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                                  <span style={{ background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: '20px', padding: '0.2rem 0.75rem', fontSize: '0.75rem', color: '#a5b4fc', fontWeight: 600 }}>
+                                    Total: {results.length}
+                                  </span>
+                                  <span style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '20px', padding: '0.2rem 0.75rem', fontSize: '0.75rem', color: '#34d399', fontWeight: 600 }}>
+                                    Identified: {known.length}
+                                  </span>
+                                  <span style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '20px', padding: '0.2rem 0.75rem', fontSize: '0.75rem', color: '#f87171', fontWeight: 600 }}>
+                                    Unknown: {unknown.length}
+                                  </span>
+                                </div>
+
+                                {/* Known faces */}
+                                {known.length > 0 && (
+                                  <div style={{ marginBottom: '0.75rem' }}>
+                                    <p style={{ margin: '0 0 0.5rem', fontSize: '0.78rem', color: '#34d399', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                      ✅ Identified
+                                    </p>
+                                    <div style={{ display: 'grid', gap: '0.4rem' }}>
+                                      {known.map((face, idx) => (
+                                        <div key={idx} style={{
+                                          background: 'rgba(16,185,129,0.07)', border: '1px solid rgba(16,185,129,0.2)',
+                                          borderRadius: '8px', padding: '0.5rem 0.75rem',
+                                          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem',
+                                        }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                                            <span style={{ fontSize: '1rem' }}>👤</span>
+                                            <span style={{ fontWeight: 600, fontSize: '0.875rem', color: '#f1f5f9' }}>{face.name}</span>
+                                          </div>
+                                          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                            {face.emotion && (
+                                              <span style={{ background: 'rgba(99,102,241,0.15)', borderRadius: '12px', padding: '0.15rem 0.6rem', fontSize: '0.72rem', color: '#a5b4fc', fontWeight: 600 }}>
+                                                {face.emotion}
+                                              </span>
+                                            )}
+                                            {face.confidence !== undefined && (
+                                              <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                                                {(face.confidence * 100).toFixed(1)}% conf.
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Unknown faces */}
+                                {unknown.length > 0 && (
+                                  <div>
+                                    <p style={{ margin: '0 0 0.5rem', fontSize: '0.78rem', color: '#f87171', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                      ❓ Unknown
+                                    </p>
+                                    <div style={{ display: 'grid', gap: '0.4rem' }}>
+                                      {unknown.map((face, idx) => (
+                                        <div key={idx} style={{
+                                          background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.2)',
+                                          borderRadius: '8px', padding: '0.5rem 0.75rem',
+                                          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem',
+                                        }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                                            <span style={{ fontSize: '1rem' }}>❓</span>
+                                            <span style={{ fontWeight: 600, fontSize: '0.875rem', color: '#94a3b8' }}>Unknown Face #{idx + 1}</span>
+                                          </div>
+                                          {face.emotion && (
+                                            <span style={{ background: 'rgba(99,102,241,0.15)', borderRadius: '12px', padding: '0.15rem 0.6rem', fontSize: '0.72rem', color: '#a5b4fc', fontWeight: 600 }}>
+                                              {face.emotion}
+                                            </span>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               )
             }
