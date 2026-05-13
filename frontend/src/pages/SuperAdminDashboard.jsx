@@ -1,516 +1,546 @@
 /**
  * src/pages/SuperAdminDashboard.jsx
- * ────────────────────────────────────
- * Dashboard for super_admin role (Netsmartz / company level).
- * Features:
- *   - System metrics (requests, latency, uptime)
- *   - All organisations list + create new org
- *   - All users across all orgs + invite org_admin + change role + deactivate
- *   - Audit log viewer
+ * ───────────────────────────────────
+ * Super Admin dashboard — full system management.
+ * Tabs: Overview, Organisations, Users, Audit Logs
  */
 
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import {
-  Activity, AlertCircle, Building2, CheckCircle2, ChevronDown, Clock,
-  Cpu, ImagePlus, LogOut, PlusCircle, RefreshCw, ScanFace, Shield,
-  Sparkles, Trash2, UserCheck, UserMinus, UserPlus, Users, Zap,
+  Sparkles, LogOut, LayoutDashboard, Building2, Users,
+  ClipboardList, Activity, Zap, Clock, Hash,
+  UserCheck, UserX, Trash2, ShieldAlert, RefreshCw,
+  Plus, X, Send, ChevronDown
 } from 'lucide-react'
 import { useAuth } from '../AuthContext'
 import {
   fetchMetrics, fetchOrganisations, createOrganisation,
-  fetchUsers, inviteUser, changeUserRole, deactivateUser, activateUser,
-  fetchAuditLogs,
+  fetchUsers, deactivateUser, activateUser, changeUserRole,
+  deleteUser, inviteUser, fetchAuditLogs,
 } from '../api'
 
-// ── helpers ─────────────────────────────────────────────────────────────────
+const TABS = ['Overview', 'Organisations', 'Users', 'Audit Logs']
 
-const roleColors = {
-  super_admin: '#f59e0b',
-  org_admin:   '#8b5cf6',
-  user:        '#10b981',
+const ROLE_BADGE = {
+  super_admin: { label: 'Super Admin', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
+  org_admin: { label: 'Org Admin', color: '#6366f1', bg: 'rgba(99,102,241,0.1)' },
+  user: { label: 'Member', color: '#10b981', bg: 'rgba(16,185,129,0.1)' },
 }
 
-const roleBadge = (role) => (
-  <span style={{
-    background: `${roleColors[role]}22`,
-    color: roleColors[role],
-    border: `1px solid ${roleColors[role]}55`,
-    borderRadius: '4px',
-    padding: '2px 8px',
-    fontSize: '0.75rem',
-    fontWeight: 600,
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-  }}>
-    {role.replace('_', ' ')}
-  </span>
-)
+function Badge({ role }) {
+  const b = ROLE_BADGE[role] || { label: role, color: '#94a3b8', bg: 'rgba(148,163,184,0.1)' }
+  return (
+    <span style={{
+      background: b.bg, color: b.color,
+      border: `1px solid ${b.color}40`,
+      borderRadius: '20px', padding: '0.2rem 0.7rem',
+      fontSize: '0.75rem', fontWeight: 600,
+    }}>{b.label}</span>
+  )
+}
 
-function StatCard({ icon: Icon, label, value, accent }) {
+function StatCard({ icon: Icon, label, value, color = '#6366f1' }) {
   return (
     <div style={{
-      background: 'rgba(15,23,42,0.6)',
-      border: `1px solid ${accent}33`,
-      borderRadius: '12px',
-      padding: '1.25rem 1.5rem',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '1rem',
-      boxShadow: `0 0 20px ${accent}11`,
+      background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(99,102,241,0.2)',
+      borderRadius: '12px', padding: '1.25rem', display: 'flex',
+      alignItems: 'center', gap: '1rem',
     }}>
       <div style={{
-        width: 44, height: 44, borderRadius: '10px',
-        background: `${accent}22`, display: 'flex',
-        alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+        background: `${color}20`, borderRadius: '10px',
+        padding: '0.75rem', color,
       }}>
-        <Icon size={20} color={accent} />
+        <Icon size={20} />
       </div>
       <div>
-        <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginBottom: '2px' }}>{label}</div>
-        <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#f1f5f9' }}>{value}</div>
+        <p style={{ margin: 0, color: '#64748b', fontSize: '0.8rem' }}>{label}</p>
+        <p style={{ margin: 0, color: '#f1f5f9', fontSize: '1.4rem', fontWeight: 700 }}>{value}</p>
       </div>
     </div>
   )
 }
-
-function SectionHeader({ icon: Icon, title, accent = '#6366f1' }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem' }}>
-      <Icon size={18} color={accent} />
-      <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#f1f5f9' }}>{title}</h2>
-    </div>
-  )
-}
-
-// ── main component ───────────────────────────────────────────────────────────
 
 export default function SuperAdminDashboard() {
   const { user, logout } = useAuth()
-
-  // metrics
+  const navigate = useNavigate()
+  const [tab, setTab] = useState('Overview')
   const [metrics, setMetrics] = useState(null)
-  const [metricsError, setMetricsError] = useState('')
-
-  // organisations
   const [orgs, setOrgs] = useState([])
-  const [newOrgName, setNewOrgName] = useState('')
-  const [creatingOrg, setCreatingOrg] = useState(false)
-  const [orgMsg, setOrgMsg] = useState({ type: '', text: '' })
-
-  // users
   const [users, setUsers] = useState([])
+  const [logs, setLogs] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  // Invite modal
+  const [showInvite, setShowInvite] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState('org_admin')
+  const [inviteResult, setInviteResult] = useState('')
   const [inviting, setInviting] = useState(false)
-  const [inviteToken, setInviteToken] = useState('')
-  const [inviteMsg, setInviteMsg] = useState({ type: '', text: '' })
 
-  // audit
-  const [auditLogs, setAuditLogs] = useState([])
-  const [auditPage, setAuditPage] = useState(1)
+  // New org modal
+  const [showNewOrg, setShowNewOrg] = useState(false)
+  const [newOrgName, setNewOrgName] = useState('')
+  const [creatingOrg, setCreatingOrg] = useState(false)
 
-  // active tab
-  const [tab, setTab] = useState('overview')
-
-  // ── load data ──────────────────────────────────────────────────────────────
-
-  const loadMetrics = async () => {
+  const load = async () => {
+    setLoading(true); setError('')
     try {
-      const data = await fetchMetrics()
-      setMetrics(data)
-    } catch (e) {
-      setMetricsError(e.message)
-    }
+      const [m, o, u, l] = await Promise.all([
+        fetchMetrics(), fetchOrganisations(), fetchUsers(), fetchAuditLogs()
+      ])
+      setMetrics(m); setOrgs(o); setUsers(u); setLogs(l)
+    } catch (e) { setError(e.message) }
+    setLoading(false)
   }
 
-  const loadOrgs = async () => {
-    try { setOrgs(await fetchOrganisations()) } catch { /* silent */ }
-  }
-
-  const loadUsers = async () => {
-    try { setUsers(await fetchUsers()) } catch { /* silent */ }
-  }
-
-  const loadAudit = async () => {
-    try { setAuditLogs(await fetchAuditLogs(auditPage)) } catch { /* silent */ }
-  }
-
-  useEffect(() => {
-    loadMetrics()
-    loadOrgs()
-    loadUsers()
-  }, [])
-
-  useEffect(() => { if (tab === 'audit') loadAudit() }, [tab, auditPage])
-
-  // ── actions ────────────────────────────────────────────────────────────────
-
-  const handleCreateOrg = async () => {
-    if (!newOrgName.trim()) return
-    setCreatingOrg(true)
-    setOrgMsg({ type: '', text: '' })
-    try {
-      await createOrganisation(newOrgName.trim())
-      setNewOrgName('')
-      setOrgMsg({ type: 'success', text: 'Organisation created successfully.' })
-      loadOrgs()
-    } catch (e) {
-      setOrgMsg({ type: 'error', text: e.message })
-    }
-    setCreatingOrg(false)
-  }
+  useEffect(() => { load() }, [])
 
   const handleInvite = async () => {
-    if (!inviteEmail.trim()) return
-    setInviting(true)
-    setInviteMsg({ type: '', text: '' })
-    setInviteToken('')
+    if (!inviteEmail) return
+    setInviting(true); setInviteResult('')
     try {
-      const res = await inviteUser(inviteEmail.trim(), inviteRole)
-      setInviteToken(res.invite_token)
-      setInviteMsg({ type: 'success', text: `Invite token generated for ${inviteEmail}. Copy and share it.` })
+      const res = await inviteUser(inviteEmail, inviteRole)
+      setInviteResult({
+        success: true,
+        email: inviteEmail,
+        token: res.invite_token,
+        emailSent: res.email_sent,
+      })
       setInviteEmail('')
     } catch (e) {
-      setInviteMsg({ type: 'error', text: e.message })
+      setInviteResult({ success: false, message: e.message })
     }
     setInviting(false)
   }
 
-  const handleRoleChange = async (userId, newRole) => {
+  const handleCreateOrg = async () => {
+    if (!newOrgName) return
+    setCreatingOrg(true)
     try {
-      await changeUserRole(userId, newRole)
-      loadUsers()
-    } catch (e) {
-      alert(`Role change failed: ${e.message}`)
-    }
+      await createOrganisation(newOrgName)
+      setNewOrgName(''); setShowNewOrg(false)
+      load()
+    } catch (e) { setError(e.message) }
+    setCreatingOrg(false)
   }
 
-  const handleToggleActive = async (u) => {
-    try {
-      if (u.is_active) await deactivateUser(u.id)
-      else await activateUser(u.id)
-      loadUsers()
-    } catch (e) {
-      alert(`Action failed: ${e.message}`)
-    }
+  const handleDeactivate = async (id) => {
+    try { await deactivateUser(id); load() } catch (e) { setError(e.message) }
   }
 
-  // ── UI ─────────────────────────────────────────────────────────────────────
+  const handleActivate = async (id) => {
+    try { await activateUser(id); load() } catch (e) { setError(e.message) }
+  }
 
-  const tabs = [
-    { id: 'overview',       label: 'Overview',       icon: Activity },
-    { id: 'organisations',  label: 'Organisations',  icon: Building2 },
-    { id: 'users',          label: 'Users',          icon: Users },
-    { id: 'audit',          label: 'Audit Log',      icon: Shield },
-  ]
+  const handleDelete = async (id) => {
+    if (!window.confirm('Permanently delete this user?')) return
+    try { await deleteUser(id); load() } catch (e) { setError(e.message) }
+  }
+
+  const handleRoleChange = async (id, role) => {
+    try { await changeUserRole(id, role); load() } catch (e) { setError(e.message) }
+  }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0f172a', color: '#f1f5f9' }}>
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)', color: '#f1f5f9' }}>
 
-      {/* Top bar */}
+      {/* Navbar */}
       <header style={{
-        background: 'rgba(15,23,42,0.95)',
-        borderBottom: '1px solid #1e293b',
-        padding: '0 2rem',
-        height: '60px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        backdropFilter: 'blur(12px)',
-        position: 'sticky',
-        top: 0,
-        zIndex: 50,
+        background: 'rgba(15,23,42,0.8)', backdropFilter: 'blur(20px)',
+        borderBottom: '1px solid rgba(99,102,241,0.2)',
+        padding: '0 2rem', height: '60px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        position: 'sticky', top: 0, zIndex: 100,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <Sparkles size={20} color="#f59e0b" />
-          <span style={{ fontWeight: 800, fontSize: '1.05rem', letterSpacing: '-0.02em' }}>VisionX</span>
-          <span style={{
-            background: '#f59e0b22', color: '#f59e0b', border: '1px solid #f59e0b55',
-            borderRadius: '4px', padding: '2px 8px', fontSize: '0.7rem', fontWeight: 700,
-            textTransform: 'uppercase', letterSpacing: '0.08em', marginLeft: '0.5rem',
-          }}>Super Admin</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <Sparkles size={18} color="#6366f1" />
+          <span style={{ fontWeight: 700, fontSize: '1.1rem' }}>VisionX</span>
+          <span style={{ color: '#64748b', fontSize: '0.85rem', marginLeft: '0.5rem' }}>Super Admin</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>{user?.email}</span>
-          <Link to="/upload" style={{ color: '#6366f1', fontSize: '0.85rem', textDecoration: 'none' }}>
-            <ImagePlus size={16} style={{ verticalAlign: 'middle', marginRight: '4px' }} />Upload
-          </Link>
-          <Link to="/live" style={{ color: '#6366f1', fontSize: '0.85rem', textDecoration: 'none' }}>
-            <ScanFace size={16} style={{ verticalAlign: 'middle', marginRight: '4px' }} />Live
-          </Link>
-          <button onClick={logout} style={{ background: 'none', border: '1px solid #334155', borderRadius: '6px', color: '#94a3b8', padding: '5px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.83rem' }}>
-            <LogOut size={14} /> Logout
+          <span style={{ color: '#64748b', fontSize: '0.85rem' }}>{user?.email}</span>
+          <Badge role="super_admin" />
+          <button onClick={logout} style={{
+            background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+            borderRadius: '8px', padding: '0.4rem 0.8rem', color: '#f87171',
+            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem',
+          }}>
+            <LogOut size={14} /> Log Out
           </button>
         </div>
       </header>
 
-      {/* Tab nav */}
-      <div style={{ borderBottom: '1px solid #1e293b', background: 'rgba(15,23,42,0.8)', padding: '0 2rem' }}>
-        <div style={{ display: 'flex', gap: '0' }}>
-          {tabs.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              onClick={() => setTab(id)}
-              style={{
-                background: 'none',
-                border: 'none',
-                borderBottom: tab === id ? '2px solid #6366f1' : '2px solid transparent',
-                color: tab === id ? '#f1f5f9' : '#64748b',
-                padding: '1rem 1.25rem',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                fontSize: '0.88rem',
-                fontWeight: tab === id ? 600 : 400,
-                transition: 'all 0.15s',
-              }}
-            >
-              <Icon size={15} /> {label}
-            </button>
-          ))}
+      <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '2rem' }}>
+
+        {/* Page title */}
+        <div style={{ marginBottom: '2rem' }}>
+          <h1 style={{ margin: 0, fontSize: '1.8rem', fontWeight: 700 }}>System Dashboard</h1>
+          <p style={{ margin: '0.25rem 0 0', color: '#64748b' }}>Full system overview and management</p>
         </div>
-      </div>
 
-      <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '2rem' }}>
+        {/* Error */}
+        {error && (
+          <div style={{
+            background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+            borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '1.5rem', color: '#fca5a5',
+          }}>{error}</div>
+        )}
 
-        {/* ── OVERVIEW ── */}
-        {tab === 'overview' && (
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem', borderBottom: '1px solid rgba(71,85,105,0.3)', paddingBottom: '0' }}>
+          {TABS.map(t => (
+            <button key={t} onClick={() => setTab(t)} style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              padding: '0.6rem 1.2rem', fontSize: '0.9rem', fontWeight: 600,
+              color: tab === t ? '#6366f1' : '#64748b',
+              borderBottom: tab === t ? '2px solid #6366f1' : '2px solid transparent',
+              marginBottom: '-1px', transition: 'color 0.2s',
+            }}>{t}</button>
+          ))}
+          <button onClick={load} style={{
+            marginLeft: 'auto', background: 'none', border: 'none',
+            color: '#64748b', cursor: 'pointer', padding: '0.6rem',
+          }}>
+            <RefreshCw size={16} className={loading ? 'spinning' : ''} />
+          </button>
+        </div>
+
+        {/* ── Overview Tab ─────────────────────────────────────────────── */}
+        {tab === 'Overview' && (
           <div>
-            <div style={{ marginBottom: '1.5rem' }}>
-              <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800 }}>System Overview</h1>
-              <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: '0.88rem' }}>
-                Real-time metrics and system health.
-              </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+              <StatCard icon={Activity} label="Request Count" value={metrics?.request_count ?? '—'} color="#6366f1" />
+              <StatCard icon={Zap} label="Avg Latency" value={metrics ? `${metrics.avg_latency_s}s` : '—'} color="#10b981" />
+              <StatCard icon={Clock} label="Uptime" value={metrics ? `${Math.round(metrics.uptime_s)}s` : '—'} color="#f59e0b" />
+              <StatCard icon={Building2} label="Organisations" value={orgs.length} color="#8b5cf6" />
+              <StatCard icon={Users} label="Total Users" value={users.length} color="#06b6d4" />
+              <StatCard icon={ClipboardList} label="Audit Entries" value={logs.length} color="#f43f5e" />
             </div>
 
-            {metricsError && (
-              <div style={{ background: '#ff4c4c22', border: '1px solid #ff4c4c55', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '1.5rem', color: '#ff4c4c', fontSize: '0.88rem' }}>
-                <AlertCircle size={14} style={{ verticalAlign: 'middle', marginRight: '6px' }} />
-                {metricsError}
-              </div>
-            )}
-
-            {metrics && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
-                <StatCard icon={Activity}  label="Total Requests"   value={metrics.request_count ?? 0}                   accent="#6366f1" />
-                <StatCard icon={Zap}       label="Avg. Latency"     value={`${(metrics.avg_latency_s ?? 0).toFixed(3)}s`} accent="#10b981" />
-                <StatCard icon={Cpu}       label="Uptime"           value={`${Math.floor((metrics.uptime_s ?? 0) / 60)}m`} accent="#f59e0b" />
-                <StatCard icon={Users}     label="Organisations"    value={orgs.length}                                  accent="#8b5cf6" />
-                <StatCard icon={UserCheck} label="Total Users"      value={users.length}                                 accent="#06b6d4" />
-              </div>
-            )}
-
-            <div style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid #6366f133', borderRadius: '12px', padding: '1.5rem' }}>
-              <SectionHeader icon={Activity} title="Quick Actions" accent="#6366f1" />
+            {/* Quick actions */}
+            <div style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: '12px', padding: '1.5rem' }}>
+              <h3 style={{ margin: '0 0 1rem', fontSize: '1rem' }}>Quick Actions</h3>
               <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-                <button onClick={() => setTab('organisations')} style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', color: '#f1f5f9', padding: '0.6rem 1.2rem', cursor: 'pointer', fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Building2 size={15} /> Manage Organisations
+                <button onClick={() => setShowInvite(true)} style={{
+                  background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                  border: 'none', borderRadius: '8px', padding: '0.7rem 1.2rem',
+                  color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600,
+                }}>
+                  <Send size={16} /> Invite User
                 </button>
-                <button onClick={() => setTab('users')} style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', color: '#f1f5f9', padding: '0.6rem 1.2rem', cursor: 'pointer', fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Users size={15} /> Manage Users
+                <button onClick={() => setShowNewOrg(true)} style={{
+                  background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)',
+                  borderRadius: '8px', padding: '0.7rem 1.2rem',
+                  color: '#a5b4fc', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600,
+                }}>
+                  <Plus size={16} /> New Organisation
                 </button>
-                <button onClick={loadMetrics} style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', color: '#64748b', padding: '0.6rem 1.2rem', cursor: 'pointer', fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <RefreshCw size={14} /> Refresh Metrics
+                <button onClick={() => navigate('/upload')} style={{
+                  background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)',
+                  borderRadius: '8px', padding: '0.7rem 1.2rem',
+                  color: '#34d399', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600,
+                }}>
+                  <LayoutDashboard size={16} /> Go to Detection
                 </button>
               </div>
             </div>
           </div>
         )}
 
-        {/* ── ORGANISATIONS ── */}
-        {tab === 'organisations' && (
+        {/* ── Organisations Tab ─────────────────────────────────────────── */}
+        {tab === 'Organisations' && (
           <div>
-            <div style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
-              <div>
-                <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800 }}>Organisations</h1>
-                <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: '0.88rem' }}>{orgs.length} total</p>
-              </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ margin: 0 }}>All Organisations ({orgs.length})</h3>
+              <button onClick={() => setShowNewOrg(true)} style={{
+                background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                border: 'none', borderRadius: '8px', padding: '0.6rem 1rem',
+                color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.875rem', fontWeight: 600,
+              }}>
+                <Plus size={14} /> New Organisation
+              </button>
             </div>
-
-            {/* Create org */}
-            <div style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid #1e293b', borderRadius: '12px', padding: '1.25rem', marginBottom: '1.5rem' }}>
-              <SectionHeader icon={PlusCircle} title="Create Organisation" accent="#10b981" />
-              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-                <input
-                  type="text"
-                  placeholder="Organisation name…"
-                  value={newOrgName}
-                  onChange={(e) => setNewOrgName(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleCreateOrg()}
-                  style={{ flex: 1, minWidth: '200px', background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', color: '#f1f5f9', padding: '0.6rem 1rem', fontSize: '0.88rem' }}
-                />
-                <button onClick={handleCreateOrg} disabled={creatingOrg || !newOrgName.trim()} style={{ background: '#10b981', border: 'none', borderRadius: '8px', color: '#fff', padding: '0.6rem 1.25rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.88rem', opacity: creatingOrg || !newOrgName.trim() ? 0.5 : 1 }}>
-                  {creatingOrg ? 'Creating…' : 'Create'}
-                </button>
-              </div>
-              {orgMsg.text && (
-                <p style={{ margin: '0.5rem 0 0', fontSize: '0.83rem', color: orgMsg.type === 'success' ? '#10b981' : '#ff4c4c' }}>
-                  {orgMsg.text}
-                </p>
-              )}
-            </div>
-
-            {/* Org list */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {orgs.length === 0 && <p style={{ color: '#64748b' }}>No organisations yet.</p>}
-              {orgs.map((org) => (
-                <div key={org.id} style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid #1e293b', borderRadius: '10px', padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    <Building2 size={18} color="#8b5cf6" />
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{org.name}</div>
-                      <div style={{ fontSize: '0.75rem', color: '#64748b' }}>ID: {org.id.slice(0, 8)}…</div>
-                    </div>
+            <div style={{ display: 'grid', gap: '0.75rem' }}>
+              {orgs.map(org => (
+                <div key={org.id} style={{
+                  background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(71,85,105,0.3)',
+                  borderRadius: '10px', padding: '1rem 1.25rem',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                }}>
+                  <div>
+                    <p style={{ margin: 0, fontWeight: 600, fontSize: '0.95rem' }}>{org.name}</p>
+                    <p style={{ margin: '0.2rem 0 0', color: '#64748b', fontSize: '0.78rem' }}>ID: {org.id}</p>
                   </div>
-                  <span style={{ fontSize: '0.75rem', color: org.is_active ? '#10b981' : '#ef4444' }}>
-                    {org.is_active ? <><CheckCircle2 size={12} style={{ verticalAlign: 'middle', marginRight: '4px' }} />Active</> : 'Inactive'}
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <span style={{
+                      background: org.is_active ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+                      color: org.is_active ? '#34d399' : '#f87171',
+                      border: `1px solid ${org.is_active ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`,
+                      borderRadius: '20px', padding: '0.2rem 0.7rem', fontSize: '0.75rem', fontWeight: 600,
+                    }}>
+                      {org.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                    <span style={{ color: '#64748b', fontSize: '0.8rem' }}>
+                      {users.filter(u => u.org_id === org.id).length} users
+                    </span>
+                  </div>
                 </div>
               ))}
+              {orgs.length === 0 && <p style={{ color: '#64748b' }}>No organisations yet.</p>}
             </div>
           </div>
         )}
 
-        {/* ── USERS ── */}
-        {tab === 'users' && (
+        {/* ── Users Tab ─────────────────────────────────────────────────── */}
+        {tab === 'Users' && (
           <div>
-            <div style={{ marginBottom: '1.5rem' }}>
-              <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800 }}>Users</h1>
-              <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: '0.88rem' }}>{users.length} total across all organisations</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ margin: 0 }}>All Users ({users.length})</h3>
+              <button onClick={() => setShowInvite(true)} style={{
+                background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                border: 'none', borderRadius: '8px', padding: '0.6rem 1rem',
+                color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.875rem', fontWeight: 600,
+              }}>
+                <Send size={14} /> Invite User
+              </button>
             </div>
-
-            {/* Invite panel */}
-            <div style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid #1e293b', borderRadius: '12px', padding: '1.25rem', marginBottom: '1.5rem' }}>
-              <SectionHeader icon={UserPlus} title="Invite User" accent="#8b5cf6" />
-              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-                <input
-                  type="email"
-                  placeholder="Email address…"
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                  style={{ flex: 1, minWidth: '200px', background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', color: '#f1f5f9', padding: '0.6rem 1rem', fontSize: '0.88rem' }}
-                />
-                <select
-                  value={inviteRole}
-                  onChange={(e) => setInviteRole(e.target.value)}
-                  style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', color: '#f1f5f9', padding: '0.6rem 1rem', fontSize: '0.88rem', cursor: 'pointer' }}
-                >
-                  <option value="org_admin">Org Admin</option>
-                  <option value="user">User</option>
-                </select>
-                <button onClick={handleInvite} disabled={inviting || !inviteEmail.trim()} style={{ background: '#8b5cf6', border: 'none', borderRadius: '8px', color: '#fff', padding: '0.6rem 1.25rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.88rem', opacity: inviting || !inviteEmail.trim() ? 0.5 : 1 }}>
-                  {inviting ? 'Generating…' : 'Send Invite'}
-                </button>
-              </div>
-              {inviteMsg.text && (
-                <p style={{ margin: '0.5rem 0 0', fontSize: '0.83rem', color: inviteMsg.type === 'success' ? '#10b981' : '#ff4c4c' }}>
-                  {inviteMsg.text}
-                </p>
-              )}
-              {inviteToken && (
-                <div style={{ marginTop: '0.75rem', background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', padding: '0.75rem 1rem' }}>
-                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>Invite Token (share this link):</div>
-                  <code style={{ fontSize: '0.78rem', color: '#a5b4fc', wordBreak: 'break-all' }}>
-                    {window.location.origin}/signup?token={inviteToken}
-                  </code>
-                </div>
-              )}
-            </div>
-
-            {/* Users table */}
-            <div style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid #1e293b', borderRadius: '12px', overflow: 'hidden' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
-                <thead>
-                  <tr style={{ background: '#1e293b', color: '#94a3b8' }}>
-                    <th style={{ textAlign: 'left', padding: '0.75rem 1rem', fontWeight: 600 }}>Email</th>
-                    <th style={{ textAlign: 'left', padding: '0.75rem 1rem', fontWeight: 600 }}>Role</th>
-                    <th style={{ textAlign: 'left', padding: '0.75rem 1rem', fontWeight: 600 }}>Status</th>
-                    <th style={{ textAlign: 'right', padding: '0.75rem 1rem', fontWeight: 600 }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.length === 0 && (
-                    <tr><td colSpan={4} style={{ padding: '1.5rem', textAlign: 'center', color: '#64748b' }}>No users found.</td></tr>
+            <div style={{ display: 'grid', gap: '0.75rem' }}>
+              {users.map(u => (
+                <div key={u.id} style={{
+                  background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(71,85,105,0.3)',
+                  borderRadius: '10px', padding: '1rem 1.25rem',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem',
+                  opacity: u.is_active ? 1 : 0.6,
+                }}>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ margin: 0, fontWeight: 600, fontSize: '0.95rem' }}>{u.email}</p>
+                    <p style={{ margin: '0.2rem 0 0', color: '#64748b', fontSize: '0.78rem' }}>ID: {u.id}</p>
+                  </div>
+                  <Badge role={u.role} />
+                  <span style={{
+                    background: u.is_active ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+                    color: u.is_active ? '#34d399' : '#f87171',
+                    border: `1px solid ${u.is_active ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`,
+                    borderRadius: '20px', padding: '0.2rem 0.7rem', fontSize: '0.75rem', fontWeight: 600,
+                  }}>
+                    {u.is_active ? 'Active' : 'Inactive'}
+                  </span>
+                  {/* Role change */}
+                  {u.role !== 'super_admin' && u.email !== user?.email && (
+                    <select
+                      value={u.role}
+                      onChange={(e) => handleRoleChange(u.id, e.target.value)}
+                      style={{
+                        background: 'rgba(30,41,59,0.8)', border: '1px solid rgba(71,85,105,0.5)',
+                        borderRadius: '6px', padding: '0.3rem 0.5rem', color: '#f1f5f9', fontSize: '0.8rem', cursor: 'pointer',
+                      }}
+                    >
+                      <option value="org_admin">Org Admin</option>
+                      <option value="user">User</option>
+                    </select>
                   )}
-                  {users.map((u, idx) => (
-                    <tr key={u.id} style={{ borderTop: '1px solid #1e293b', background: idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
-                      <td style={{ padding: '0.75rem 1rem', color: '#f1f5f9' }}>{u.email}</td>
-                      <td style={{ padding: '0.75rem 1rem' }}>
-                        {u.role === 'super_admin' ? roleBadge(u.role) : (
-                          <select
-                            value={u.role}
-                            onChange={(e) => handleRoleChange(u.id, e.target.value)}
-                            style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '6px', color: '#f1f5f9', padding: '3px 8px', fontSize: '0.8rem', cursor: 'pointer' }}
-                          >
-                            <option value="org_admin">Org Admin</option>
-                            <option value="user">User</option>
-                          </select>
-                        )}
-                      </td>
-                      <td style={{ padding: '0.75rem 1rem' }}>
-                        <span style={{ fontSize: '0.78rem', color: u.is_active ? '#10b981' : '#ef4444' }}>
-                          {u.is_active ? '● Active' : '● Inactive'}
-                        </span>
-                      </td>
-                      <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
-                        {u.role !== 'super_admin' && (
-                          <button
-                            onClick={() => handleToggleActive(u)}
-                            title={u.is_active ? 'Deactivate' : 'Activate'}
-                            style={{ background: 'none', border: '1px solid #334155', borderRadius: '6px', color: u.is_active ? '#ef4444' : '#10b981', padding: '4px 10px', cursor: 'pointer', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                          >
-                            {u.is_active ? <><UserMinus size={12} /> Deactivate</> : <><UserCheck size={12} /> Activate</>}
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                  {/* Actions */}
+                  {u.email !== user?.email && (
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      {u.is_active
+                        ? <button onClick={() => handleDeactivate(u.id)} title="Deactivate" style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '6px', padding: '0.3rem 0.5rem', color: '#fbbf24', cursor: 'pointer' }}>
+                          <UserX size={14} />
+                        </button>
+                        : <button onClick={() => handleActivate(u.id)} title="Activate" style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '6px', padding: '0.3rem 0.5rem', color: '#34d399', cursor: 'pointer' }}>
+                          <UserCheck size={14} />
+                        </button>
+                      }
+                      <button onClick={() => handleDelete(u.id)} title="Delete" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '6px', padding: '0.3rem 0.5rem', color: '#f87171', cursor: 'pointer' }}>
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+              {users.length === 0 && <p style={{ color: '#64748b' }}>No users yet.</p>}
             </div>
           </div>
         )}
 
-        {/* ── AUDIT LOG ── */}
-        {tab === 'audit' && (
+        {/* ── Audit Logs Tab ────────────────────────────────────────────── */}
+        {tab === 'Audit Logs' && (
           <div>
-            <div style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
-                <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800 }}>Audit Log</h1>
-                <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: '0.88rem' }}>All system actions recorded here.</p>
-              </div>
-              <button onClick={loadAudit} style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', color: '#94a3b8', padding: '0.5rem 1rem', cursor: 'pointer', fontSize: '0.83rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <RefreshCw size={13} /> Refresh
+            <h3 style={{ margin: '0 0 1rem' }}>Audit Logs ({logs.length})</h3>
+            {logs.length === 0
+              ? <p style={{ color: '#64748b' }}>No audit logs yet. Actions like invites, deactivations, and deletions will appear here.</p>
+              : (
+                <div style={{ display: 'grid', gap: '0.5rem' }}>
+                  {logs.map((log, idx) => (
+                    <div key={idx} style={{
+                      background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(71,85,105,0.3)',
+                      borderRadius: '8px', padding: '0.75rem 1rem',
+                      display: 'flex', alignItems: 'center', gap: '1rem',
+                    }}>
+                      <ShieldAlert size={16} color="#f59e0b" style={{ flexShrink: 0 }} />
+                      <div style={{ flex: 1 }}>
+                        <p style={{ margin: 0, fontSize: '0.875rem', fontWeight: 600 }}>{log.action}</p>
+                        <p style={{ margin: '0.2rem 0 0', color: '#64748b', fontSize: '0.78rem' }}>
+                          {log.actor_email || log.actor_id} → {log.target_type} {log.target_id}
+                        </p>
+                      </div>
+                      <span style={{ color: '#475569', fontSize: '0.78rem', flexShrink: 0 }}>
+                        {log.created_at ? new Date(log.created_at).toLocaleString() : ''}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )
+            }
+          </div>
+        )}
+      </div>
+
+      {/* ── Invite Modal ──────────────────────────────────────────────────── */}
+      {showInvite && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200,
+        }}>
+          <div style={{
+            background: '#1e293b', border: '1px solid rgba(99,102,241,0.3)',
+            borderRadius: '16px', padding: '2rem', width: '100%', maxWidth: '420px',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h3 style={{ margin: 0 }}>Invite User</h3>
+              <button onClick={() => { setShowInvite(false); setInviteResult('') }}
+                style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer' }}>
+                <X size={20} />
               </button>
             </div>
 
-            {auditLogs.length === 0 ? (
-              <div style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid #1e293b', borderRadius: '12px', padding: '2rem', textAlign: 'center', color: '#64748b' }}>
-                No audit log entries yet. Actions like inviting users, changing roles, and deactivating accounts will appear here.
+            {/* Success state */}
+            {inviteResult?.success ? (
+              <div>
+                <div style={{
+                  background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)',
+                  borderRadius: '8px', padding: '1rem', marginBottom: '1.2rem',
+                }}>
+                  <p style={{ color: '#34d399', fontWeight: 600, margin: '0 0 0.5rem', fontSize: '0.9rem' }}>
+                    ✅ {inviteResult.emailSent
+                      ? `Invite email sent to ${inviteResult.email}`
+                      : `Invite generated for ${inviteResult.email} (email not sent)`}
+                  </p>
+                  <p style={{ color: '#64748b', fontSize: '0.78rem', margin: '0 0 0.75rem' }}>
+                    Copy this token and share it with the user. They should go to:<br />
+                    <span style={{ color: '#a5b4fc' }}>
+                      {window.location.origin}/signup?token=...
+                    </span>
+                  </p>
+                  <div style={{
+                    background: 'rgba(15,23,42,0.8)', borderRadius: '6px',
+                    padding: '0.75rem', fontSize: '0.72rem', color: '#94a3b8',
+                    wordBreak: 'break-all', marginBottom: '0.75rem',
+                    maxHeight: '80px', overflowY: 'auto',
+                    border: '1px solid rgba(71,85,105,0.3)',
+                  }}>
+                    {inviteResult.token}
+                  </div>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(
+                        `${window.location.origin}/signup?token=${inviteResult.token}`
+                      )
+                      alert('Signup link copied to clipboard!')
+                    }}
+                    style={{
+                      width: '100%', background: 'rgba(99,102,241,0.2)',
+                      border: '1px solid rgba(99,102,241,0.4)',
+                      borderRadius: '8px', padding: '0.6rem',
+                      color: '#a5b4fc', cursor: 'pointer', fontWeight: 600, fontSize: '0.875rem',
+                    }}
+                  >
+                    📋 Copy Signup Link
+                  </button>
+                </div>
+                <button
+                  onClick={() => { setShowInvite(false); setInviteResult('') }}
+                  style={{
+                    width: '100%', background: 'rgba(71,85,105,0.2)',
+                    border: '1px solid rgba(71,85,105,0.3)',
+                    borderRadius: '8px', padding: '0.7rem',
+                    color: '#94a3b8', cursor: 'pointer', fontWeight: 600,
+                  }}
+                >
+                  Close
+                </button>
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {auditLogs.map((log) => (
-                  <div key={log.id} style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid #1e293b', borderRadius: '8px', padding: '0.75rem 1rem', display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }}>
-                    <Shield size={14} color="#6366f1" style={{ marginTop: '2px', flexShrink: 0 }} />
-                    <div style={{ flex: 1 }}>
-                      <span style={{ fontWeight: 600, color: '#f1f5f9', fontSize: '0.88rem' }}>{log.action}</span>
-                      {log.detail && <span style={{ color: '#64748b', fontSize: '0.83rem', marginLeft: '0.5rem' }}>{log.detail}</span>}
-                    </div>
-                    <span style={{ fontSize: '0.75rem', color: '#475569', flexShrink: 0 }}>
-                      <Clock size={11} style={{ verticalAlign: 'middle', marginRight: '3px' }} />
-                      {new Date(log.created_at).toLocaleString()}
-                    </span>
-                  </div>
-                ))}
+              /* Input state */
+              <div>
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.85rem', marginBottom: '0.4rem' }}>Email</label>
+                  <input type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)}
+                    placeholder="user@example.com"
+                    style={{ width: '100%', background: 'rgba(30,41,59,0.8)', border: '1px solid rgba(71,85,105,0.5)', borderRadius: '8px', padding: '0.7rem', color: '#f1f5f9', fontSize: '0.9rem', outline: 'none', boxSizing: 'border-box' }} />
+                </div>
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.85rem', marginBottom: '0.4rem' }}>Role</label>
+                  <select value={inviteRole} onChange={e => setInviteRole(e.target.value)}
+                    style={{ width: '100%', background: 'rgba(30,41,59,0.8)', border: '1px solid rgba(71,85,105,0.5)', borderRadius: '8px', padding: '0.7rem', color: '#f1f5f9', fontSize: '0.9rem', outline: 'none', boxSizing: 'border-box' }}>
+                    <option value="org_admin">Org Admin</option>
+                    <option value="user">User</option>
+                  </select>
+                </div>
+                {inviteResult?.success === false && (
+                  <div style={{
+                    background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+                    borderRadius: '8px', padding: '0.75rem', marginBottom: '1rem',
+                    color: '#fca5a5', fontSize: '0.85rem',
+                  }}>{inviteResult.message}</div>
+                )}
+                <button onClick={handleInvite} disabled={inviting} style={{
+                  width: '100%', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                  border: 'none', borderRadius: '8px', padding: '0.8rem',
+                  color: '#fff', fontWeight: 600, cursor: inviting ? 'not-allowed' : 'pointer',
+                  opacity: inviting ? 0.7 : 1,
+                }}>
+                  {inviting ? 'Generating...' : 'Send Invite'}
+                </button>
               </div>
             )}
           </div>
-        )}
+        </div>
+      )}
 
-      </main>
+      {/* ── New Org Modal ─────────────────────────────────────────────────── */}
+      {showNewOrg && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200,
+        }}>
+          <div style={{
+            background: '#1e293b', border: '1px solid rgba(99,102,241,0.3)',
+            borderRadius: '16px', padding: '2rem', width: '100%', maxWidth: '380px',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h3 style={{ margin: 0 }}>New Organisation</h3>
+              <button onClick={() => setShowNewOrg(false)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer' }}>
+                <X size={20} />
+              </button>
+            </div>
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.85rem', marginBottom: '0.4rem' }}>Organisation Name</label>
+              <input type="text" value={newOrgName} onChange={e => setNewOrgName(e.target.value)}
+                placeholder="e.g. IT Team"
+                style={{ width: '100%', background: 'rgba(30,41,59,0.8)', border: '1px solid rgba(71,85,105,0.5)', borderRadius: '8px', padding: '0.7rem', color: '#f1f5f9', fontSize: '0.9rem', outline: 'none', boxSizing: 'border-box' }} />
+            </div>
+            <button onClick={handleCreateOrg} disabled={creatingOrg} style={{
+              width: '100%', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+              border: 'none', borderRadius: '8px', padding: '0.8rem',
+              color: '#fff', fontWeight: 600, cursor: creatingOrg ? 'not-allowed' : 'pointer',
+            }}>
+              {creatingOrg ? 'Creating...' : 'Create Organisation'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

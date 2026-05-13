@@ -1,82 +1,112 @@
 /**
  * src/AuthContext.jsx
- * ──────────────────────────────────────────────────────────────────────────
- * Provides auth state and login/logout to the whole app.
+ * ────────────────────
+ * Global auth state for the entire app.
+ * Replaces the old ApiKeyContext which used a raw API key.
  *
- * user = { email, role, org_id }  or  null when not logged in
- * isLoading = true while restoring session on first page load
+ * Provides:
+ *   - user        → { email, role } or null if not logged in
+ *   - isLoading   → true while checking stored tokens on page load
+ *   - login()     → call with email + password, sets user state
+ *   - logout()    → clears tokens, redirects to /login
+ *
+ * Usage in any component:
+ *   const { user, login, logout } = useAuth()
  */
 
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   login as apiLogin,
   logout as apiLogout,
-  restoreSession,
-  clearAccessToken,
-  clearRefreshToken,
+  restoreSession as apiRestoreSession,
+  getAccessToken,
+  getRefreshToken,
+  setAccessToken,
+  setRefreshToken,
+  setUserInfo,
+  getUserRole,
+  getUserEmail,
+  decodeToken,
+  clearTokens,
 } from './api'
 
 const AuthContext = createContext(null)
 
-const INACTIVITY_MS = 24 * 60 * 1000   // 24 minutes
-
 export function AuthProvider({ children }) {
-  const [user, setUser]         = useState(null)
-  const [isLoading, setLoading] = useState(true)
-  const navigate                = useNavigate()
-  const inactivityTimer         = useRef(null)
+  const [user, setUser] = useState(null)       // { email, role } or null
+  const [isLoading, setIsLoading] = useState(true) // checking stored tokens
 
-  // ── Restore session on first load ──────────────────────────────────────
-
+  // ── On page load — restore session from stored tokens ──────────────────────
   useEffect(() => {
-    restoreSession()
-      .then((restored) => {
-        if (restored) setUser(restored)
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false))
+    const init = async () => {
+      try {
+        const result = await apiRestoreSession()
+        if (result) {
+          setUser(result)
+        }
+      } catch {
+        // Silently fail, user stays logged out
+      }
+      setIsLoading(false)
+    }
+    init()
   }, [])
 
-  // ── Inactivity auto-logout ─────────────────────────────────────────────
-
+  // ── Auto-logout on inactivity (24 minutes — matches JWT expiry) ────────────
   useEffect(() => {
     if (!user) return
 
-    const reset = () => {
-      clearTimeout(inactivityTimer.current)
-      inactivityTimer.current = setTimeout(() => doLogout(), INACTIVITY_MS)
+    const TIMEOUT_MS = 24 * 60 * 1000
+    let timeout
+
+    const resetTimer = () => {
+      clearTimeout(timeout)
+      timeout = setTimeout(() => {
+        handleLogout()
+      }, TIMEOUT_MS)
     }
 
-    reset()
-    window.addEventListener('mousemove', reset)
-    window.addEventListener('keydown', reset)
-    window.addEventListener('click', reset)
+    resetTimer()
+
+    window.addEventListener('mousemove', resetTimer)
+    window.addEventListener('keydown',   resetTimer)
+    window.addEventListener('click',     resetTimer)
+    window.addEventListener('scroll',    resetTimer)
 
     return () => {
-      clearTimeout(inactivityTimer.current)
-      window.removeEventListener('mousemove', reset)
-      window.removeEventListener('keydown', reset)
-      window.removeEventListener('click', reset)
+      clearTimeout(timeout)
+      window.removeEventListener('mousemove', resetTimer)
+      window.removeEventListener('keydown',   resetTimer)
+      window.removeEventListener('click',     resetTimer)
+      window.removeEventListener('scroll',    resetTimer)
     }
   }, [user])
 
-  // ── Actions ────────────────────────────────────────────────────────────
-
-  const login = async (email, password) => {
-    const userData = await apiLogin(email, password)
-    setUser(userData)
-    return userData   // caller uses role to redirect
+  // ── Login ──────────────────────────────────────────────────────────────────
+  const handleLogin = async (email, password) => {
+    const result = await apiLogin(email, password)
+    setUser({ email: result.email, role: result.role })
+    return result
   }
 
-  const doLogout = async () => {
+  // ── Logout ─────────────────────────────────────────────────────────────────
+  const handleLogout = async () => {
     await apiLogout()
     setUser(null)
-    navigate('/login')
+    // Redirect to login — use window.location so it works outside Router context
+    window.location.href = '/login'
   }
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout: doLogout }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        isLoading,
+        login  : handleLogin,
+        logout : handleLogout,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   )

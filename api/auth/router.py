@@ -9,7 +9,8 @@ POST /auth/invite    — org_admin / super_admin issues an invite token
 POST /auth/signup-invite — user registers using an invite token
 """
 
-from datetime import datetime, timezone
+from api.email_service import send_invite_email
+from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -22,12 +23,22 @@ from api.auth.schemas import (
 from api.auth.service import (
     blacklist_token, create_access_token, create_refresh_token,
     decode_token, hash_password, is_blacklisted, verify_password,
+    _make_token,
 )
 from api.dependencies import get_current_user, require_role
 from api.models import Organisation, User, UserRole
 from db.base import get_db
 
 router = APIRouter()
+
+@router.get("/check-setup")
+async def check_setup(db: AsyncSession = Depends(get_db)):
+    """
+    Returns whether a super admin already exists.
+    Used by the frontend to show first-time setup vs normal login.
+    """
+    existing = await db.scalar(select(User).where(User.role == UserRole.super_admin))
+    return {"setup_complete": existing is not None}
 
 
 # ── Signup (seeds super_admin + org) ─────────────────────────────────────────
@@ -132,28 +143,41 @@ async def invite_user(
     current_user : User = Depends(require_role(["super_admin", "org_admin"])),
     db           : AsyncSession = Depends(get_db),
 ):
-    """
-    Generates a signed invite token. Share this with the new user —
-    they call POST /auth/signup-invite to complete registration.
-    """
-    from api.auth.service import _make_token
-    from datetime import timedelta
-
-    # org_admin can only invite user or org_admin (not super_admin)
     if current_user.role == UserRole.org_admin and payload.role == UserRole.super_admin:
         raise HTTPException(403, "org_admin cannot invite super_admin.")
 
+    # Generate invite token
     token = _make_token(
         {
-            "sub"    : str(current_user.id),
-            "invite_email": payload.email,
-            "invite_role" : payload.role.value,
-            "org_id" : str(current_user.org_id),
+            "sub"          : str(current_user.id),
+            "invite_email" : payload.email,
+            "invite_role"  : payload.role.value,
+            "org_id"       : str(current_user.org_id),
         },
         timedelta(hours=48),
         "invite",
     )
-    return {"invite_token": token, "expires_in": "48 hours"}
+
+    # Get org name for email
+    from api.models import Organisation
+    org = await db.get(Organisation, current_user.org_id)
+    org_name = org.name if org else "VisionX"
+
+    # Send email (non-blocking — don't fail if email fails)
+    from api.email_service import send_invite_email
+    email_sent = await send_invite_email(
+        to_email     = payload.email,
+        invite_token = token,
+        invited_by   = current_user.email,
+        role         = payload.role.value,
+        org_name     = org_name,
+    )
+
+    return {
+        "invite_token" : token,
+        "expires_in"   : "48 hours",
+        "email_sent"   : email_sent,
+    }
 
 
 # ── Signup via invite ─────────────────────────────────────────────────────────

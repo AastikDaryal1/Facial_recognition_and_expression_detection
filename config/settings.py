@@ -142,3 +142,8 @@ JWT_SECRET_KEY            = os.getenv("JWT_SECRET_KEY")   # must be set in .env 
 JWT_ALGORITHM             = "HS256"
 JWT_EXPIRE_MINUTES        = int(os.getenv("JWT_EXPIRE_MINUTES", "1440"))
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
+
+# ── Email ─────────────────────────────────────────────────────────────────────
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+FRONTEND_URL   = os.getenv("FRONTEND_URL", "http://localhost:5173")
+FROM_EMAIL     = os.getenv("FROM_EMAIL", "onboarding@resend.dev")

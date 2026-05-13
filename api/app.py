@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, File, HTTPException, UploadFile, status, Depends, Request
+from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -48,8 +49,8 @@ from pipelines.inference import run as inference_run
 from utils.logger import get_logger
 from api.auth.router import router as auth_router
 from api.dependencies import get_current_user, require_role
-from api.models import User
-from db.base import engine, Base
+from api.models import User, Session
+from db.base import engine, Base, get_db
 
 log = get_logger(__name__)
 
@@ -245,6 +246,7 @@ async def predict_image(
     request      : Request,
     file         : UploadFile = File(...),
     current_user : User = Depends(get_current_user),   # any logged-in user
+    db           : AsyncSession = Depends(get_db),
 ):
     """
     Upload a JPEG/PNG image.
@@ -284,6 +286,23 @@ async def predict_image(
         except Exception as e:
             log.warning("Could not encode output image: %s", e)
 
+    # Save session to DB
+    try:
+        session_rec = Session(
+            user_id      = current_user.id,
+            org_id       = current_user.org_id,
+            n_faces      = result["n_faces"],
+            n_identified = result["n_identified"],
+            elapsed_s    = round(elapsed, 3),
+            results_json = result["results"],
+        )
+        db.add(session_rec)
+        await db.commit()
+        log.info("Session recorded: %s", session_rec.id)
+    except Exception as e:
+        log.error("Failed to save session record: %s", e)
+        # We don't raise here — inference was successful, session saving is secondary
+
     return PredictResponse(
         n_faces         = result["n_faces"],
         n_identified    = result["n_identified"],
@@ -304,6 +323,7 @@ async def predict_base64(
     request      : Request,
     payload      : Base64Request,
     current_user : User = Depends(get_current_user),   # any logged-in user
+    db           : AsyncSession = Depends(get_db),
 ):
     """
     Send a base64-encoded image string.
@@ -329,6 +349,22 @@ async def predict_base64(
     elapsed = time.time() - t0
     _state["request_count"] += 1
     _state["total_latency"]  += elapsed
+
+    # Save session to DB
+    try:
+        session_rec = Session(
+            user_id      = current_user.id,
+            org_id       = current_user.org_id,
+            n_faces      = result["n_faces"],
+            n_identified = result["n_identified"],
+            elapsed_s    = round(elapsed, 3),
+            results_json = result["results"],
+        )
+        db.add(session_rec)
+        await db.commit()
+        log.info("Session recorded (base64): %s", session_rec.id)
+    except Exception as e:
+        log.error("Failed to save session record: %s", e)
 
     return PredictResponse(
         n_faces      = result["n_faces"],
