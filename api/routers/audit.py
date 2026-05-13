@@ -40,40 +40,20 @@ router = APIRouter()
 
 async def write_audit_log(
     db          : AsyncSession,
-    actor_id    : Optional[uuid.UUID],
-    org_id      : Optional[uuid.UUID],
+    actor_id    : Optional[uuid.UUID | str],
+    org_id      : Optional[uuid.UUID | str],
     action      : str,
     target_type : Optional[str] = None,
     target_id   : Optional[str] = None,
     detail      : Optional[dict] = None,
 ) -> None:
-    """
-    Record an audit log entry. Call this inside any router after a
-    mutating action, before committing the main transaction.
+    # Convert string IDs to UUID objects
+    aid = uuid.UUID(actor_id) if isinstance(actor_id, str) else actor_id
+    oid = uuid.UUID(org_id)   if isinstance(org_id, str)   else org_id
 
-    Usage example (inside any router):
-        from api.routers.audit import write_audit_log
-        await write_audit_log(
-            db          = db,
-            actor_id    = current_user.id,
-            org_id      = current_user.org_id,
-            action      = "user.invite",
-            target_type = "user",
-            target_id   = str(invited_user.id),
-            detail      = {"email": invited_user.email, "role": invited_user.role.value},
-        )
-
-    Standard action strings (use these for consistency):
-        auth.signup           auth.login            auth.logout
-        auth.invite           auth.invite_accept
-        user.role_change      user.deactivate        user.activate      user.delete
-        org.create            org.update             org.deactivate     org.activate    org.delete
-        person.create         person.update          person.delete      person.enrolled
-        session.delete        session.note_update
-    """
     log_entry = AuditLog(
-        actor_id    = actor_id,
-        org_id      = org_id,
+        actor_id    = aid,
+        org_id      = oid,
         action      = action,
         target_type = target_type,
         target_id   = target_id,
@@ -113,7 +93,7 @@ def _audit_out(log: AuditLog) -> dict:
         "target_type": log.target_type,
         "target_id"  : log.target_id,
         "detail"     : log.detail,
-        "created_at" : log.created_at.isoformat(),
+        "created_at" : log.created_at.isoformat() if log.created_at else None,
     }
 
 

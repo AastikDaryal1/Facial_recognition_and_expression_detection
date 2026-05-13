@@ -72,13 +72,19 @@ async def get_redis() -> aioredis.Redis:
 
 async def blacklist_token(jti: str, ttl_seconds: int) -> None:
     """Add jti to Redis with the token's remaining TTL."""
-    r = await get_redis()
-    await r.setex(f"bl:{jti}", ttl_seconds, "1")
-    await r.aclose()
+    try:
+        r = await get_redis()
+        await r.setex(f"bl:{jti}", ttl_seconds, "1")
+        await r.aclose()
+    except Exception:
+        pass  # If Redis is unavailable, token blacklisting is best-effort
 
 
 async def is_blacklisted(jti: str) -> bool:
-    r = await get_redis()
-    result = await r.exists(f"bl:{jti}")
-    await r.aclose()
-    return bool(result)
+    try:
+        r = await get_redis()
+        result = await r.exists(f"bl:{jti}")
+        await r.aclose()
+        return bool(result)
+    except Exception:
+        return False  # If Redis is unavailable, fail open (don't block all requests)

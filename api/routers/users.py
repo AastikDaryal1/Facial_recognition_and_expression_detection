@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies import get_current_user, require_role
 from api.models import User, UserRole
+from api.routers.audit import write_audit_log
 from db.base import get_db
 
 router = APIRouter()
@@ -147,7 +148,17 @@ async def change_user_role(
             "You cannot change your own role."
         )
 
+    old_role = target.role.value
     target.role = payload.role
+    await write_audit_log(
+        db          = db,
+        actor_id    = current_user.id,
+        org_id      = current_user.org_id,
+        action      = "user.role_change",
+        target_type = "user",
+        target_id   = str(target.id),
+        detail      = {"email": target.email, "old_role": old_role, "new_role": payload.role.value},
+    )
     await db.commit()
     await db.refresh(target)
     return _user_out(target)
@@ -181,6 +192,15 @@ async def deactivate_user(
         )
 
     target.is_active = False
+    await write_audit_log(
+        db          = db,
+        actor_id    = current_user.id,
+        org_id      = current_user.org_id,
+        action      = "user.deactivate",
+        target_type = "user",
+        target_id   = str(target.id),
+        detail      = {"email": target.email, "role": target.role.value},
+    )
     await db.commit()
     await db.refresh(target)
     return _user_out(target)
@@ -207,6 +227,15 @@ async def activate_user(
         )
 
     target.is_active = True
+    await write_audit_log(
+        db          = db,
+        actor_id    = current_user.id,
+        org_id      = current_user.org_id,
+        action      = "user.activate",
+        target_type = "user",
+        target_id   = str(target.id),
+        detail      = {"email": target.email, "role": target.role.value},
+    )
     await db.commit()
     await db.refresh(target)
     return _user_out(target)
@@ -231,5 +260,14 @@ async def delete_user(
             "You cannot delete your own account."
         )
 
+    await write_audit_log(
+        db          = db,
+        actor_id    = current_user.id,
+        org_id      = current_user.org_id,
+        action      = "user.delete",
+        target_type = "user",
+        target_id   = str(target.id),
+        detail      = {"email": target.email, "role": target.role.value},
+    )
     await db.delete(target)
     await db.commit()

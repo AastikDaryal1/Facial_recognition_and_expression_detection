@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies import get_current_user, require_role
 from api.models import Organisation, User, UserRole
+from api.routers.audit import write_audit_log
 from db.base import get_db
 
 router = APIRouter()
@@ -131,6 +132,17 @@ async def create_organisation(
     """
     org = Organisation(name=payload.name)
     db.add(org)
+    await db.flush()  # get org.id
+
+    await write_audit_log(
+        db          = db,
+        actor_id    = current_user.id,
+        org_id      = org.id,
+        action      = "org.create",
+        target_type = "organisation",
+        target_id   = str(org.id),
+        detail      = {"name": org.name, "created_by": current_user.email},
+    )
     await db.commit()
     await db.refresh(org)
     return _org_out(org)
@@ -168,6 +180,15 @@ async def deactivate_organisation(
     if not org.is_active:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Organisation is already deactivated.")
     org.is_active = False
+    await write_audit_log(
+        db          = db,
+        actor_id    = current_user.id,
+        org_id      = org.id,
+        action      = "org.deactivate",
+        target_type = "organisation",
+        target_id   = str(org.id),
+        detail      = {"name": org.name},
+    )
     await db.commit()
     await db.refresh(org)
     return _org_out(org)

@@ -10,9 +10,12 @@ POST /auth/signup-invite — user registers using an invite token
 """
 
 from api.email_service import send_invite_email
+import uuid
 from datetime import datetime, timezone, timedelta
+import traceback
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,6 +30,7 @@ from api.auth.service import (
 )
 from api.dependencies import get_current_user, require_role
 from api.models import Organisation, User, UserRole
+from api.routers.audit import write_audit_log
 from db.base import get_db
 
 router = APIRouter()
@@ -68,13 +72,24 @@ async def signup(payload: SignupRequest, db: AsyncSession = Depends(get_db)):
         org_id        = org.id,
     )
     db.add(user)
-    await db.commit()
-    await db.refresh(user)
-
-    return TokenResponse(
-        access_token  = create_access_token(str(user.id), user.role.value, str(user.org_id)),
-        refresh_token = create_refresh_token(str(user.id)),
+    await write_audit_log(
+        db=db, actor_id=user.id, org_id=org.id,
+        action="auth.signup",
+        target_type="user", target_id=str(user.id),
+        detail={"email": user.email, "role": user.role.value},
     )
+        await db.commit()
+        await db.refresh(user)
+
+        return TokenResponse(
+            access_token  = create_access_token(str(user.id), user.role.value, str(user.org_id)),
+            refresh_token = create_refresh_token(str(user.id)),
+        )
+    except Exception as e:
+        print("SIGNUP ERROR TRACEBACK:")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(500, f"Signup failed: {str(e)}")
 
 
 # ── Login ─────────────────────────────────────────────────────────────────────
@@ -98,8 +113,12 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
 
 # ── Refresh ───────────────────────────────────────────────────────────────────
 
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh_token(refresh_token: str, db: AsyncSession = Depends(get_db)):
+async def refresh_token(payload_body: RefreshRequest, db: AsyncSession = Depends(get_db)):
+    refresh_token = payload_body.refresh_token
     try:
         payload = decode_token(refresh_token)
     except Exception:
@@ -173,6 +192,14 @@ async def invite_user(
         org_name     = org_name,
     )
 
+    await write_audit_log(
+        db=db, actor_id=current_user.id, org_id=current_user.org_id,
+        action="auth.invite",
+        target_type="user", target_id=None,
+        detail={"invited_email": payload.email, "role": payload.role.value},
+    )
+    await db.commit()
+
     return {
         "invite_token" : token,
         "expires_in"   : "48 hours",
@@ -199,14 +226,21 @@ async def signup_invite(payload: InviteSignupRequest, db: AsyncSession = Depends
     if existing:
         raise HTTPException(400, "Email already registered.")
 
-    user = User(
-        email         = payload.email,
-        password_hash = hash_password(payload.password),
-        role          = UserRole(invite["invite_role"]),
-        org_id        = invite["org_id"],
-        invited_by    = invite["sub"],
-    )
+    try:
+        user = User(
+            email         = payload.email,
+            password_hash = hash_password(payload.password),
+            role          = UserRole(invite["invite_role"]),
+            org_id        = uuid.UUID(invite["org_id"]) if invite.get("org_id") else None,
+            invited_by    = uuid.UUID(invite["sub"]) if invite.get("sub") else None,
+        )
     db.add(user)
+    await write_audit_log(
+        db=db, actor_id=user.id, org_id=user.org_id,
+        action="auth.invite_accept",
+        target_type="user", target_id=str(user.id),
+        detail={"email": user.email, "role": user.role.value, "invited_by": invite["sub"]},
+    )
     await db.commit()
     await db.refresh(user)
 

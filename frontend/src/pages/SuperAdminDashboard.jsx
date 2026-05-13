@@ -283,7 +283,7 @@ export default function SuperAdminDashboard() {
                       {org.is_active ? 'Active' : 'Inactive'}
                     </span>
                     <span style={{ color: '#64748b', fontSize: '0.8rem' }}>
-                      {users.filter(u => u.org_id === org.id).length} users
+                      {users.filter(u => u.org_id === org.id && u.role !== 'super_admin').length} members
                     </span>
                   </div>
                 </div>
@@ -372,24 +372,61 @@ export default function SuperAdminDashboard() {
               ? <p style={{ color: '#64748b' }}>No audit logs yet. Actions like invites, deactivations, and deletions will appear here.</p>
               : (
                 <div style={{ display: 'grid', gap: '0.5rem' }}>
-                  {logs.map((log, idx) => (
-                    <div key={idx} style={{
-                      background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(71,85,105,0.3)',
-                      borderRadius: '8px', padding: '0.75rem 1rem',
-                      display: 'flex', alignItems: 'center', gap: '1rem',
-                    }}>
-                      <ShieldAlert size={16} color="#f59e0b" style={{ flexShrink: 0 }} />
-                      <div style={{ flex: 1 }}>
-                        <p style={{ margin: 0, fontSize: '0.875rem', fontWeight: 600 }}>{log.action}</p>
-                        <p style={{ margin: '0.2rem 0 0', color: '#64748b', fontSize: '0.78rem' }}>
-                          {log.actor_email || log.actor_id} → {log.target_type} {log.target_id}
-                        </p>
+                  {logs.map((log, idx) => {
+                    // Build a human-readable description from detail
+                    const detail = log.detail || {}
+                    const actor = detail.invited_by || detail.created_by || log.actor_id?.slice(0, 8) + '...'
+                    const targetLabel =
+                      detail.invited_email || detail.email || detail.name ||
+                      (log.target_id ? log.target_id.slice(0, 8) + '...' : '—')
+
+                    const ACTION_LABELS = {
+                      'auth.signup'        : '🔐 Super admin account created',
+                      'auth.invite'        : '📨 Invite sent',
+                      'auth.invite_accept' : '✅ Invite accepted / User registered',
+                      'user.role_change'   : '🔄 Role changed',
+                      'user.deactivate'    : '🚫 User deactivated',
+                      'user.activate'      : '✅ User reactivated',
+                      'user.delete'        : '🗑️ User deleted',
+                      'org.create'         : '🏢 Organisation created',
+                      'org.deactivate'     : '🚫 Organisation deactivated',
+                      'org.activate'       : '✅ Organisation reactivated',
+                      'org.delete'         : '🗑️ Organisation deleted',
+                    }
+                    const actionLabel = ACTION_LABELS[log.action] || log.action
+
+                    return (
+                      <div key={idx} style={{
+                        background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(71,85,105,0.3)',
+                        borderRadius: '8px', padding: '0.75rem 1rem',
+                        display: 'flex', alignItems: 'flex-start', gap: '1rem',
+                      }}>
+                        <ShieldAlert size={16} color="#f59e0b" style={{ flexShrink: 0, marginTop: '2px' }} />
+                        <div style={{ flex: 1 }}>
+                          <p style={{ margin: 0, fontSize: '0.875rem', fontWeight: 600 }}>{actionLabel}</p>
+                          <p style={{ margin: '0.2rem 0 0', color: '#94a3b8', fontSize: '0.78rem' }}>
+                            {targetLabel && <span>Target: <strong style={{ color: '#f1f5f9' }}>{targetLabel}</strong></span>}
+                            {detail.role && <span style={{ marginLeft: '0.75rem' }}>Role: <strong style={{ color: '#a5b4fc' }}>{detail.role}</strong></span>}
+                            {detail.old_role && detail.new_role && (
+                              <span style={{ marginLeft: '0.75rem' }}>
+                                <strong style={{ color: '#f87171' }}>{detail.old_role}</strong>
+                                {' → '}
+                                <strong style={{ color: '#34d399' }}>{detail.new_role}</strong>
+                              </span>
+                            )}
+                          </p>
+                          {actor && (
+                            <p style={{ margin: '0.15rem 0 0', color: '#64748b', fontSize: '0.73rem' }}>
+                              By: {actor}
+                            </p>
+                          )}
+                        </div>
+                        <span style={{ color: '#475569', fontSize: '0.78rem', flexShrink: 0 }}>
+                          {log.created_at ? new Date(log.created_at).toLocaleString() : ''}
+                        </span>
                       </div>
-                      <span style={{ color: '#475569', fontSize: '0.78rem', flexShrink: 0 }}>
-                        {log.created_at ? new Date(log.created_at).toLocaleString() : ''}
-                      </span>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )
             }

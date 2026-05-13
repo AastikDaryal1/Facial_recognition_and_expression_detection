@@ -20,8 +20,9 @@ from datetime import datetime
 from sqlalchemy import (
     Boolean, DateTime, Enum, ForeignKey,
     Integer, Float, String, Text, func,
+    JSON,
 )
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from db.base import Base
@@ -124,7 +125,7 @@ class Session(Base):
     elapsed_s    : Mapped[float] = mapped_column(Float,   default=0.0)
 
     # Full JSON results from inference (list of FaceResult dicts)
-    results_json : Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    results_json : Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     # Optional note added by org_admin
     note         : Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -151,7 +152,7 @@ class AuditLog(Base):
     action      : Mapped[str]              = mapped_column(String(100), nullable=False)   # e.g. "user.invite", "user.deactivate"
     target_type : Mapped[str | None]       = mapped_column(String(50),  nullable=True)    # e.g. "user", "organisation", "session"
     target_id   : Mapped[str | None]       = mapped_column(String(255), nullable=True)    # UUID of affected record
-    detail      : Mapped[dict | None]      = mapped_column(JSONB, nullable=True)          # extra context
+    detail      : Mapped[dict | None]      = mapped_column(JSON, nullable=True)          # extra context
 
     created_at  : Mapped[datetime]         = mapped_column(DateTime(timezone=True), server_default=func.now())
 

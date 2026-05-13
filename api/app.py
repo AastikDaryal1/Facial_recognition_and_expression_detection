@@ -49,7 +49,7 @@ from pipelines.inference import run as inference_run
 from utils.logger import get_logger
 from api.auth.router import router as auth_router
 from api.dependencies import get_current_user, require_role
-from api.models import User, Session
+from api.models import User, Session, Organisation, Person, AuditLog  # noqa: F401 — all must be imported so Base.metadata.create_all creates their tables
 from db.base import engine, Base, get_db
 
 log = get_logger(__name__)
@@ -219,7 +219,7 @@ async def model_info(
 
 
 @app.get("/metrics", response_model=MetricsResponse, tags=["System"])
-@limiter.limit(RATE_LIMIT)
+@limiter.limit("120/minute")  # dashboard polls this frequently; higher limit than public endpoints
 async def metrics(
     request      : Request,
     current_user : User = Depends(require_role(["super_admin"])),  # super_admin only

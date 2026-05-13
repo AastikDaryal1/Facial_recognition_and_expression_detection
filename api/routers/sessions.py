@@ -73,7 +73,7 @@ def _session_out(s: Session) -> dict:
         "elapsed_s"   : s.elapsed_s,
         "results_json": s.results_json,
         "note"        : s.note,
-        "created_at"  : s.created_at.isoformat(),
+        "created_at"  : s.created_at.isoformat() if s.created_at else None,
     }
 
 
@@ -124,19 +124,25 @@ async def list_sessions(
     - org_admin   → all sessions in their org
     - super_admin → all sessions everywhere
     """
-    offset = (page - 1) * page_size
-    stmt = select(Session).order_by(desc(Session.created_at)).offset(offset).limit(page_size)
+    try:
+        offset = (page - 1) * page_size
+        stmt = select(Session).order_by(desc(Session.created_at)).offset(offset).limit(page_size)
 
-    if current_user.role == UserRole.super_admin:
-        pass  # no filter — sees all
-    elif current_user.role == UserRole.org_admin:
-        stmt = stmt.where(Session.org_id == current_user.org_id)
-    else:
-        stmt = stmt.where(Session.user_id == current_user.id)
+        if current_user.role == UserRole.super_admin:
+            pass  # no filter — sees all
+        elif current_user.role == UserRole.org_admin:
+            stmt = stmt.where(Session.org_id == current_user.org_id)
+        else:
+            stmt = stmt.where(Session.user_id == current_user.id)
 
-    result = await db.execute(stmt)
-    sessions = result.scalars().all()
-    return [_session_out(s) for s in sessions]
+        result = await db.execute(stmt)
+        sessions = result.scalars().all()
+        return [_session_out(s) for s in sessions]
+    except Exception as e:
+        print("LIST SESSIONS ERROR TRACEBACK:")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, f"Failed to list sessions: {str(e)}")
 
 
 @router.get("/{session_id}", response_model=SessionOut)
