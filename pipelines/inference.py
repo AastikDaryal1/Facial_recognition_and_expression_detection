@@ -159,6 +159,7 @@ def run(
     output_dir     : str | Path = Path("data/output"),
     recognizer     : Optional[FaceRecognizer] = None,
     save_annotated : bool = True,
+    generate_crops : bool = True,
 ) -> dict:
     """
     Execute the inference pipeline on a single image.
@@ -259,12 +260,13 @@ def run(
             log.warning("Emotion error: %s", e)
 
         face_image_b64 = None
-        try:
-            face_resized = cv2.resize(face_crop, (100, 100))
-            _, buffer = cv2.imencode(".jpg", face_resized, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
-            face_image_b64 = "data:image/jpeg;base64," + base64.b64encode(buffer).decode("utf-8")
-        except Exception as e:
-            log.warning("Failed to encode face crop: %s", e)
+        if generate_crops:
+            try:
+                face_resized = cv2.resize(face_crop, (100, 100))
+                _, buffer = cv2.imencode(".jpg", face_resized, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+                face_image_b64 = "data:image/jpeg;base64," + base64.b64encode(buffer).decode("utf-8")
+            except Exception as e:
+                log.warning("Failed to encode face crop: %s", e)
 
         r = {
             "face_idx"   : i,

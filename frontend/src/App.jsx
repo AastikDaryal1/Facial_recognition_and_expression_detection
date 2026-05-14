@@ -547,29 +547,71 @@ function UploadPage() {
   const [simulatedProgress, setSimulatedProgress] = useState(0)
   const [isSimulating, setIsSimulating] = useState(false)
   const [statusText, setStatusText] = useState('')
+  const [isConverting, setIsConverting] = useState(false)
+  const [previewError, setPreviewError] = useState(false)
 
   const MAX_SIZE_MB = import.meta.env.VITE_MAX_UPLOAD_SIZE_MB || 5
 
   useEffect(() => {
-    if (!file) return undefined
+    if (!file) {
+      setPreviewUrl('')
+      setPreviewError(false)
+      return undefined
+    }
+    setPreviewError(false)
     const nextPreview = URL.createObjectURL(file)
     setPreviewUrl(nextPreview)
     return () => URL.revokeObjectURL(nextPreview)
   }, [file])
 
-  const handleSelection = (selectedFile) => {
+  const handleSelection = async (selectedFile) => {
     setResult(null)
     setError('')
     if (!selectedFile) return
+
     if (!isSupportedImageFile(selectedFile)) {
-      setError('Please upload a valid image file.')
+      setError('Please upload a valid image file (JPG, PNG, HEIC).')
       return
     }
+
     if (selectedFile.size > MAX_SIZE_MB * 1024 * 1024) {
       window.alert(`Error: File is too large. Maximum size allowed is ${MAX_SIZE_MB}MB.`)
       return
     }
-    setFile(selectedFile)
+
+    const lowerName = selectedFile.name?.toLowerCase() || ''
+    if (lowerName.endsWith('.heic') || lowerName.endsWith('.heif')) {
+      if (window.heic2any) {
+        setIsConverting(true)
+        try {
+          // Set original file first so it's ready for upload even if preview fails
+          setFile(selectedFile)
+
+          const convertedBlob = await window.heic2any({
+            blob: selectedFile,
+            toType: 'image/jpeg'
+          })
+          
+          // Create a new file for PREVIEW purposes mainly, but also for upload
+          const newFile = new File(
+            [Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob],
+            selectedFile.name.replace(/\.(heic|heif)$/i, '.jpg'),
+            { type: 'image/jpeg' }
+          )
+          setFile(newFile)
+          console.log('HEIC converted successfully for preview')
+        } catch (err) {
+          console.warn('HEIC preview conversion failed, proceeding with original file:', err)
+          // File is already set to original above
+        } finally {
+          setIsConverting(false)
+        }
+      } else {
+        setFile(selectedFile)
+      }
+    } else {
+      setFile(selectedFile)
+    }
   }
 
   const handleDrop = (event) => {
@@ -709,41 +751,51 @@ function UploadPage() {
       </div>
 
       <div
-        className={`upload-zone glass-card ${dragActive ? 'drag-active' : ''}`}
+        className={`upload-zone glass-card ${dragActive ? 'drag-active' : ''} ${isConverting ? 'processing' : ''}`}
         onDragOver={(event) => {
           event.preventDefault()
           setDragActive(true)
         }}
         onDragLeave={() => setDragActive(false)}
         onDrop={handleDrop}
-        onClick={() => document.getElementById('file-input').click()}
+        onClick={() => !isConverting && document.getElementById('file-input').click()}
       >
-        <div className="upload-icon-wrapper">
-          <div className="upload-glow"></div>
-          <CloudUpload size={42} className={dragActive ? 'float' : ''} style={{ color: dragActive ? 'var(--neon-cyan)' : 'var(--accent-blue)', position: 'relative' }} />
-        </div>
-        <div style={{ marginBottom: '0.5rem' }}>
-          <p style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text)', marginBottom: '4px' }}>
-            {dragActive ? 'Drop to Initialize' : 'AI Analysis Hub'}
-          </p>
-          <p className="muted" style={{ fontSize: '0.85rem' }}>Drop image here or click to browse</p>
-        </div>
-        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }} onClick={(e) => e.stopPropagation()}>
-          <label className="secondary-btn">
-            Choose Image
-            <input
-              id="file-input"
-              type="file"
-              accept="image/*"
-              hidden
-              onChange={(event) => handleSelection(event.target.files?.[0])}
-            />
-          </label>
-          <button className="secondary-btn" onClick={startCamera}>
-            <Camera size={18} style={{ marginRight: '8px' }} />
-            Open Camera
-          </button>
-        </div>
+        {isConverting ? (
+          <div className="conversion-status">
+            <div className="shimmer-loader" style={{ width: '40px', height: '40px', borderRadius: '50%', margin: '0 auto 1rem auto' }}></div>
+            <p style={{ fontWeight: 600, color: 'var(--neon-cyan)' }}>Converting iPhone image...</p>
+            <p className="muted" style={{ fontSize: '0.85rem' }}>Optimizing HEIC for AI detection</p>
+          </div>
+        ) : (
+          <>
+            <div className="upload-icon-wrapper">
+              <div className="upload-glow"></div>
+              <CloudUpload size={42} className={dragActive ? 'float' : ''} style={{ color: dragActive ? 'var(--neon-cyan)' : 'var(--accent-blue)', position: 'relative' }} />
+            </div>
+            <div style={{ marginBottom: '0.5rem' }}>
+              <p style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text)', marginBottom: '4px' }}>
+                {dragActive ? 'Drop to Initialize' : 'AI Analysis Hub'}
+              </p>
+              <p className="muted" style={{ fontSize: '0.85rem' }}>Drop image here or click to browse</p>
+            </div>
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }} onClick={(e) => e.stopPropagation()}>
+              <label className="secondary-btn" onClick={(e) => e.stopPropagation()}>
+                Choose Image
+                <input
+                  id="file-input"
+                  type="file"
+                  accept=".jpg,.jpeg,.png,.webp,.heic,.heif"
+                  hidden
+                  onChange={(event) => handleSelection(event.target.files?.[0])}
+                />
+              </label>
+              <button className="secondary-btn" onClick={(e) => { e.stopPropagation(); startCamera(); }}>
+                <Camera size={18} style={{ marginRight: '8px' }} />
+                Open Camera
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       {showCamera && (
@@ -782,13 +834,24 @@ function UploadPage() {
           <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
             {previewUrl ? (
               <div className="preview-image-container fade-in" style={{ boxShadow: '0 0 40px rgba(0,0,0,0.5)', borderRadius: '1rem', overflow: 'hidden' }}>
-                <img
-                  src={previewUrl}
-                  alt="Selected preview"
-                  className={`preview-image ${isSimulating && simulatedProgress < 90 ? 'processing' : ''}`}
-                  onLoad={(e) => setImgDims({ w: e.target.naturalWidth, h: e.target.naturalHeight })}
-                  style={{ width: '100%', height: 'auto', borderRadius: '0' }}
-                />
+                {previewError ? (
+                  <div className="preview-fallback glass-card" style={{ padding: '3rem 1.5rem', textAlign: 'center', background: 'rgba(15, 23, 42, 0.4)' }}>
+                    <div style={{ background: 'rgba(59, 130, 246, 0.1)', width: '60px', height: '60px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem auto' }}>
+                      <ShieldCheck size={30} style={{ color: 'var(--accent-blue)' }} />
+                    </div>
+                    <p style={{ fontWeight: 600, color: 'var(--text)', marginBottom: '4px' }}>Apple Format Detected</p>
+                    <p className="muted" style={{ fontSize: '0.85rem' }}>Visual preview unavailable in browser,<br/>but AI analysis is fully supported.</p>
+                  </div>
+                ) : (
+                  <img
+                    src={previewUrl}
+                    alt="Selected preview"
+                    className={`preview-image ${isSimulating && simulatedProgress < 90 ? 'processing' : ''}`}
+                    onLoad={(e) => setImgDims({ w: e.target.naturalWidth, h: e.target.naturalHeight })}
+                    onError={() => setPreviewError(true)}
+                    style={{ width: '100%', height: 'auto', borderRadius: '0' }}
+                  />
+                )}
                 {isSimulating && simulatedProgress < 100 && (
                   <div className="scanning-beam"></div>
                 )}
@@ -999,35 +1062,107 @@ function LivePage() {
   const [isSnapshotMode, setIsSnapshotMode] = useState(false)
   const [snapshotDims, setSnapshotDims] = useState({ w: 1, h: 1 })
   const [hoveredFaceId, setHoveredFaceId] = useState(null)
+  
+  // PRODUCTION LIFECYCLE MANAGEMENT
+  const activeSessionRef = useRef(0)
+  const isProcessingRef = useRef(false)
+  const abortControllerRef = useRef(null)
+  const canvasRef = useRef(document.createElement('canvas'))
+  const lifecycleRef = useRef('IDLE') // IDLE, STARTING, RUNNING, STOPPING
+
+  const log = (msg, data = '') => {
+    const timestamp = new Date().toISOString().split('T')[1].split('Z')[0];
+    console.log(`[VisionX][${timestamp}] ${msg}`, data);
+  };
 
   const startCamera = async () => {
+    if (lifecycleRef.current === 'STARTING' || lifecycleRef.current === 'RUNNING') {
+      log('startCamera ignored - already in progress or running');
+      return;
+    }
+
+    log('--- STARTING CAMERA ---');
     if (!apiKey) {
+      log('Aborted: No API Key');
       setShowSettings(true)
       return
     }
 
+    lifecycleRef.current = 'STARTING';
     setPermissionError('')
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true })
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-      }
-      setStreaming(true)
+      // 1. Cleanup any ghost tracks first
+      log('Step 1: Disposing old session...');
+      stopCamera();
+
+      // 2. Request fresh stream
+      log('Step 2: Requesting getUserMedia...');
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { 
+          width: { ideal: 1280 }, 
+          height: { ideal: 720 },
+          frameRate: { ideal: 30 }
+        } 
+      });
+      
+      if (!videoRef.current) throw new Error('Video element unmounted');
+
+      // 3. Attach and Play
+      log('Step 3: Attaching stream and playing...');
+      videoRef.current.srcObject = stream;
+      
+      // We wrap play() in a promise to ensure we wait for the hardware to wake up
+      await new Promise((resolve, reject) => {
+        if (!videoRef.current) return reject();
+        videoRef.current.onplaying = () => {
+          log('Event: video.onplaying fired');
+          resolve();
+        };
+        videoRef.current.onerror = reject;
+        videoRef.current.play().catch(reject);
+      });
+
+      // 4. Finalize session
+      activeSessionRef.current += 1;
+      lifecycleRef.current = 'RUNNING';
+      setStreaming(true);
+      log(`--- CAMERA READY (Session #${activeSessionRef.current}) ---`);
     } catch (err) {
-      setPermissionError('Camera permission denied or unavailable.')
+      log('--- CAMERA FAILED ---', err);
+      lifecycleRef.current = 'IDLE';
+      setPermissionError('Camera error: ' + (err.message || 'Unknown failure'));
     }
   }
 
   const stopCamera = () => {
-    const stream = videoRef.current?.srcObject
-    if (stream) {
-      stream.getTracks().forEach((track) => track.stop())
+    log('--- STOPPING CAMERA ---');
+    lifecycleRef.current = 'STOPPING';
+
+    // 1. Kill Inference
+    if (abortControllerRef.current) {
+      log('Killing inference loop AbortController');
+      abortControllerRef.current.abort();
     }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null
+    activeSessionRef.current += 1; // Increment again to be sure
+    
+    // 2. Kill Hardware
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject;
+      stream.getTracks().forEach(track => {
+        log(`Stopping track: ${track.label}`);
+        track.stop();
+      });
+      videoRef.current.srcObject = null;
+      videoRef.current.load(); // Force reset video element
     }
-    setStreaming(false)
-    setDetectedFaces([])
+    
+    setStreaming(false);
+    setDetectedFaces([]);
+    setSmoothedFaces([]);
+    targetFacesRef.current = [];
+    lifecycleRef.current = 'IDLE';
+    log('--- CAMERA STOPPED ---');
   }
 
   const takeSnapshot = async () => {
@@ -1107,35 +1242,94 @@ function LivePage() {
     startCamera()
   }
 
+  // Refined Smoothing Logic for Ultra-Responsive UI
+  const [smoothedFaces, setSmoothedFaces] = useState([])
+  const targetFacesRef = useRef([])
+  const lastUpdateRef = useRef(Date.now())
+
+  useEffect(() => {
+    let rafId
+    const smoothingFactor = 0.15 // Lower = smoother/slower, Higher = snappier
+
+    const updateSmoothedPositions = () => {
+      const now = Date.now()
+      const dt = now - lastUpdateRef.current
+      lastUpdateRef.current = now
+
+      setSmoothedFaces(prev => {
+        // Map current smoothed faces to target faces by ID
+        const targets = targetFacesRef.current
+        
+        // If no targets, fade out or clear (optional)
+        if (targets.length === 0) return []
+
+        return targets.map(target => {
+          const existing = prev.find(p => p.id === target.id)
+          if (!existing) return { ...target } // New face, snap immediately
+
+          // Interpolate coordinates
+          return {
+            ...target,
+            x: existing.x + (target.x - existing.x) * smoothingFactor,
+            y: existing.y + (target.y - existing.y) * smoothingFactor,
+            w: existing.w + (target.w - existing.w) * smoothingFactor,
+            h: existing.h + (target.h - existing.h) * smoothingFactor,
+          }
+        })
+      })
+
+      rafId = requestAnimationFrame(updateSmoothedPositions)
+    }
+
+    if (streaming) {
+      rafId = requestAnimationFrame(updateSmoothedPositions)
+    }
+
+    return () => cancelAnimationFrame(rafId)
+  }, [streaming])
+
   useEffect(() => () => stopCamera(), [])
 
   useEffect(() => {
-    let isActive = true
-    let timeoutId = null
+    if (!streaming) return
 
-    if (!streaming) {
-      return
-    }
-
-    const canvas = document.createElement('canvas')
+    log(`[Inference] Initializing loop for Session #${activeSessionRef.current}`);
+    const currentSession = activeSessionRef.current
+    const canvas = canvasRef.current
     const ctx = canvas.getContext('2d')
+    
+    const controller = new AbortController()
+    abortControllerRef.current = controller
 
     const processFrame = async () => {
-      if (!isActive) return
+      // 1. SESSION GUARD
+      if (activeSessionRef.current !== currentSession || controller.signal.aborted) {
+        log(`[Inference] Terminating loop (Session mismatch or aborted)`);
+        return
+      }
+      if (isProcessingRef.current) return
 
-      if (!videoRef.current || videoRef.current.videoWidth === 0) {
-        timeoutId = setTimeout(processFrame, 500)
+      const video = videoRef.current
+      if (!video || video.paused || video.ended || video.readyState < 2) {
+        // Spin until hardware is ready
+        requestAnimationFrame(processFrame)
         return
       }
 
-      canvas.width = videoRef.current.videoWidth
-      canvas.height = videoRef.current.videoHeight
-      ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height)
-
-      const base64Image = canvas.toDataURL('image/jpeg', 0.8)
-      const image_b64 = base64Image.replace(/^data:image\/[a-z]+;base64,/, '')
+      isProcessingRef.current = true
+      const frameStart = Date.now();
 
       try {
+        const MAX_INF_WIDTH = 640
+        const scale = Math.min(1, MAX_INF_WIDTH / video.videoWidth)
+        canvas.width = video.videoWidth * scale
+        canvas.height = video.videoHeight * scale
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+
+        const base64Image = canvas.toDataURL('image/jpeg', 0.6)
+        const image_b64 = base64Image.replace(/^data:image\/[a-z]+;base64,/, '')
+
+        log(`[Inference] API Request started (Session #${currentSession})`);
         const response = await fetch(`${API_BASE}/predict/base64`, {
           method: 'POST',
           headers: {
@@ -1143,41 +1337,75 @@ function LivePage() {
             'X-API-Key': apiKey,
           },
           body: JSON.stringify({ image_b64, filename: 'live.jpg' }),
+          signal: controller.signal
         })
 
-        if (response.ok && isActive) {
-          const data = await response.json()
+        if (!response.ok) throw new Error(`API returned ${response.status}`);
 
-          const items = data.results.map((face) => ({
+        // 2. POST-AWAIT SESSION GUARD
+        if (activeSessionRef.current !== currentSession || controller.signal.aborted) {
+          log(`[Inference] API returned but session expired. Discarding.`);
+          return
+        }
+
+        const data = await response.json()
+        log(`[Inference] API Success: ${data.results.length} faces detected in ${Date.now() - frameStart}ms`);
+        
+        const items = data.results.map((face) => {
+          let localCrop = null;
+          try {
+            const cropCanvas = document.createElement('canvas');
+            const cropCtx = cropCanvas.getContext('2d');
+            const cropSize = 120;
+            cropCanvas.width = cropSize;
+            cropCanvas.height = cropSize;
+            cropCtx.drawImage(canvas, face.x, face.y, face.w, face.h, 0, 0, cropSize, cropSize);
+            localCrop = cropCanvas.toDataURL('image/jpeg', 0.85);
+          } catch (e) { /* ignore crop error */ }
+
+          return {
             id: face.face_idx,
             name: face.name,
             emotion: face.emotion,
-            face_image: face.face_image,
+            face_image: localCrop,
             x: (face.x / canvas.width) * 100,
             y: (face.y / canvas.height) * 100,
             w: (face.w / canvas.width) * 100,
             h: (face.h / canvas.height) * 100,
-          }))
+          };
+        })
 
-          setDetectedFaces(items)
-        }
+        targetFacesRef.current = items
+        setDetectedFaces(items)
       } catch (err) {
-        console.error('Live detection error:', err)
+        if (err.name === 'AbortError') {
+          log('[Inference] Fetch aborted intentionally');
+        } else {
+          log(`[Inference] Cycle Error: ${err.message}`);
+        }
       } finally {
-        if (isActive) {
-          timeoutId = setTimeout(processFrame, 400)
+        isProcessingRef.current = false
+        if (activeSessionRef.current === currentSession && !controller.signal.aborted) {
+          // Stable 150ms throttle
+          setTimeout(() => {
+            if (activeSessionRef.current === currentSession && !controller.signal.aborted) {
+              requestAnimationFrame(processFrame)
+            }
+          }, 150)
         }
       }
     }
 
-    // Start the loop
-    processFrame()
+    log(`[Inference] Scheduling loop initialization...`);
+    const initTimeout = setTimeout(processFrame, 500)
 
     return () => {
-      isActive = false
-      if (timeoutId) clearTimeout(timeoutId)
+      log(`[Inference] Cleaning up Session #${currentSession}`);
+      controller.abort()
+      clearTimeout(initTimeout)
+      isProcessingRef.current = false
     }
-  }, [streaming])
+  }, [streaming, apiKey])
 
   return (
     <section className="fade-in live-section">
@@ -1242,21 +1470,32 @@ function LivePage() {
                 })}
               </div>
             ) : (
-              <>
-                <video ref={videoRef} autoPlay muted playsInline />
+              <div className="live-feed-container" style={{ width: '100%', height: '100%', position: 'relative' }}>
+                <video 
+                  ref={videoRef} 
+                  autoPlay 
+                  muted 
+                  playsInline 
+                  style={{ 
+                    display: streaming ? 'block' : 'none', 
+                    width: '100%', 
+                    height: '100%', 
+                    objectFit: 'cover' 
+                  }} 
+                />
                 {!streaming && (
                   <div className="camera-placeholder">
                     <UserRoundSearch size={48} />
-                    <p>Camera feed will appear here</p>
+                    <p>Camera feed ready</p>
                   </div>
                 )}
-                {detectedFaces.map((face) => {
+                {streaming && smoothedFaces.map((face) => {
                   const isUnknown = !face.name || face.name.toLowerCase() === 'unknown'
                   const color = getEmotionColor(face.emotion)
                   return (
                     <div
                       key={face.id}
-                      className={`face-box fade-in ${hoveredFaceId === face.id ? 'highlighted' : ''}`}
+                      className={`face-box ${hoveredFaceId === face.id ? 'highlighted' : ''}`}
                       onMouseEnter={() => setHoveredFaceId(face.id)}
                       onMouseLeave={() => setHoveredFaceId(null)}
                       style={{
@@ -1267,7 +1506,9 @@ function LivePage() {
                         borderColor: hoveredFaceId === face.id ? '#fff' : color,
                         borderStyle: isUnknown ? 'dashed' : 'solid',
                         boxShadow: hoveredFaceId === face.id ? `0 0 25px 2px ${color}` : `0 0 10px ${color}`,
-                        zIndex: hoveredFaceId === face.id ? 100 : 1
+                        zIndex: hoveredFaceId === face.id ? 100 : 1,
+                        transition: 'none',
+                        willChange: 'left, top, width, height'
                       }}
                     >
                       <span style={{
@@ -1284,7 +1525,7 @@ function LivePage() {
                     </div>
                   )
                 })}
-              </>
+              </div>
             )}
           </div>
 
