@@ -48,7 +48,7 @@ class SessionOut(BaseModel):
     n_faces         : int
     n_identified    : int
     elapsed_s       : float
-    results_json    : Optional[dict]
+    results_json    : Optional[dict | list]
     annotated_image : Optional[str]
     note            : Optional[str]
     created_at      : str

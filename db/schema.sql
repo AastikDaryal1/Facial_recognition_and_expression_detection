@@ -49,8 +49,9 @@ CREATE TABLE IF NOT EXISTS sessions (
     n_faces      INTEGER NOT NULL DEFAULT 0,
     n_identified INTEGER NOT NULL DEFAULT 0,
     elapsed_s    FLOAT NOT NULL DEFAULT 0.0,
-    results_json JSONB,
-    note         TEXT,
+    results_json    JSONB,
+    annotated_image TEXT,
+    note            TEXT,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
