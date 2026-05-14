@@ -158,6 +158,25 @@ class MetricsResponse(BaseModel):
     uptime_s      : float
 
 
+def _encode_annotated_image(result: dict) -> Optional[str]:
+    """
+    Return a base64-encoded JPEG of the annotated image, or None.
+    For /predict/image  → reads from the saved output file (output_path).
+    For /predict/base64 → output_path is None (save_annotated=False),
+                          so we return None here; the live feed doesn't
+                          need a persisted annotated frame.
+    """
+    output_path = result.get("output_path")
+    if not output_path:
+        return None
+    try:
+        with open(output_path, "rb") as f:
+            return base64.b64encode(f.read()).decode("utf-8")
+    except Exception as e:
+        log.warning("Could not encode output image: %s", e)
+        return None
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
@@ -278,13 +297,7 @@ async def predict_image(
     _state["request_count"] += 1
     _state["total_latency"]  += elapsed
 
-    annotated_b64 = None
-    if result.get("output_path"):
-        try:
-            with open(result["output_path"], "rb") as f:
-                annotated_b64 = base64.b64encode(f.read()).decode("utf-8")
-        except Exception as e:
-            log.warning("Could not encode output image: %s", e)
+    annotated_b64 = _encode_annotated_image(result)
 
     # Save session to DB
     try:
@@ -294,7 +307,7 @@ async def predict_image(
             n_faces         = result["n_faces"],
             n_identified    = result["n_identified"],
             elapsed_s       = round(elapsed, 3),
-            results_json    = result["results"],
+            results_json    = {"results": result["results"]},
             annotated_image = annotated_b64,
         )
         db.add(session_rec)
@@ -351,7 +364,7 @@ async def predict_base64(
     _state["request_count"] += 1
     _state["total_latency"]  += elapsed
 
-    # Encode annotated image to base64 for frontend preview and DB storage
+    # save_annotated=False for live frames → output_path is None → annotated_b64 will be None
     annotated_b64 = _encode_annotated_image(result)
 
     # Save session to DB
@@ -362,7 +375,7 @@ async def predict_base64(
             n_faces         = result["n_faces"],
             n_identified    = result["n_identified"],
             elapsed_s       = round(elapsed, 3),
-            results_json    = result["results"],
+            results_json    = {"results": result["results"]},
             annotated_image = annotated_b64,
         )
         db.add(session_rec)

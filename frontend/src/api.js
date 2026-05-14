@@ -376,6 +376,39 @@ export async function deletePerson(personId) {
   if (!res.ok) throw new Error('Failed to delete person.')
 }
 
+/**
+ * Upload face photos for a person.
+ * @param {string} personId
+ * @param {File[]} files
+ */
+export async function uploadPersonPhotos(personId, files) {
+  const formData = new FormData()
+  for (const file of files) {
+    formData.append('files', file)
+  }
+  // apiFetch sets Content-Type for JSON — for FormData we must NOT set it manually
+  const token = getAccessToken()
+  const res = await fetch(`${API_BASE}/persons/${personId}/photos`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.detail || 'Failed to upload photos.')
+  return data
+}
+
+/**
+ * Trigger retraining pipeline for a person and mark them as enrolled.
+ * @param {string} personId
+ */
+export async function retrainPerson(personId) {
+  const res = await apiFetch(`/persons/${personId}/retrain`, { method: 'POST' })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.detail || 'Retrain failed.')
+  return data
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Sessions endpoints
 // ─────────────────────────────────────────────────────────────────────────────

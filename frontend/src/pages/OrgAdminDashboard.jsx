@@ -18,6 +18,7 @@ import {
   fetchPersons, createPerson, deletePerson,
   fetchSessions, deleteSession, updateSessionNote,
   inviteUser,
+  uploadPersonPhotos, retrainPerson,
 } from '../api'
 
 const TABS = ['Overview', 'Team Members', 'Enrolled Persons', 'Sessions']
@@ -88,6 +89,15 @@ export default function OrgAdminDashboard() {
   const [personDept, setPersonDept] = useState('')
   const [creatingPerson, setCreatingPerson] = useState(false)
 
+  // Photo upload state
+  const [uploadingPersonId, setUploadingPersonId] = useState(null)
+  const [uploadFiles, setUploadFiles] = useState([])
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState('')
+
+  // Retrain state
+  const [retrainingPersonId, setRetrainingPersonId] = useState(null)
+
   const load = async () => {
     setLoading(true); setError('')
     try {
@@ -154,6 +164,33 @@ export default function OrgAdminDashboard() {
   const handleDeletePerson = async (id) => {
     if (!window.confirm('Remove this person from the enrolment list?')) return
     try { await deletePerson(id); load() } catch (e) { setError(e.message) }
+  }
+
+  const handleUploadPhotos = async (personId) => {
+    if (!uploadFiles.length) return
+    setUploading(true)
+    setUploadError('')
+    try {
+      await uploadPersonPhotos(personId, uploadFiles)
+      setUploadingPersonId(null)
+      setUploadFiles([])
+      load()
+    } catch (e) {
+      setUploadError(e.message)
+    }
+    setUploading(false)
+  }
+
+  const handleRetrain = async (personId) => {
+    if (!window.confirm('This will run the full ML pipeline and may take a few minutes. Continue?')) return
+    setRetrainingPersonId(personId)
+    try {
+      await retrainPerson(personId)
+      load()
+    } catch (e) {
+      setError(e.message)
+    }
+    setRetrainingPersonId(null)
   }
 
   const handleSaveNote = async (sessionId) => {
@@ -337,7 +374,7 @@ export default function OrgAdminDashboard() {
                 border: 'none', borderRadius: '8px', padding: '0.6rem 1rem',
                 color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.875rem', fontWeight: 600,
               }}>
-                <Plus size={14} /> Enrol Person
+                <Plus size={14} /> Add Person
               </button>
             </div>
             <div style={{ display: 'grid', gap: '0.75rem' }}>
@@ -345,34 +382,127 @@ export default function OrgAdminDashboard() {
                 <div key={p.id} style={{
                   background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(71,85,105,0.3)',
                   borderRadius: '10px', padding: '1rem 1.25rem',
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem',
                 }}>
-                  <div style={{ flex: 1 }}>
-                    <p style={{ margin: 0, fontWeight: 600 }}>{p.full_name}</p>
-                    <p style={{ margin: '0.2rem 0 0', color: '#64748b', fontSize: '0.78rem' }}>
-                      {p.employee_id && `EMP: ${p.employee_id}`} {p.department && `| ${p.department}`}
-                    </p>
+                  {/* ── Person header row ── */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ margin: 0, fontWeight: 600 }}>{p.full_name}</p>
+                      <p style={{ margin: '0.2rem 0 0', color: '#64748b', fontSize: '0.78rem' }}>
+                        {p.employee_id && `EMP: ${p.employee_id}`}{p.department && ` | ${p.department}`}
+                        {' · '}{p.photo_count} photo{p.photo_count !== 1 ? 's' : ''}
+                        {p.gcs_path && <span style={{ color: '#6366f1', marginLeft: 6 }}>☁ GCS</span>}
+                      </p>
+                    </div>
+
+                    {/* Status badge */}
+                    <span style={{
+                      background: p.is_enrolled ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)',
+                      color: p.is_enrolled ? '#34d399' : '#fbbf24',
+                      border: `1px solid ${p.is_enrolled ? 'rgba(16,185,129,0.3)' : 'rgba(245,158,11,0.3)'}`,
+                      borderRadius: '20px', padding: '0.2rem 0.7rem', fontSize: '0.75rem', fontWeight: 600,
+                      whiteSpace: 'nowrap',
+                    }}>
+                      {p.is_enrolled ? '✓ Enrolled' : '⏳ Pending'}
+                    </span>
+
+                    {/* Upload photos button */}
+                    <button
+                      onClick={() => {
+                        setUploadingPersonId(uploadingPersonId === p.id ? null : p.id)
+                        setUploadFiles([])
+                        setUploadError('')
+                      }}
+                      title="Upload photos"
+                      style={{
+                        background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)',
+                        borderRadius: '6px', padding: '0.3rem 0.6rem', color: '#818cf8',
+                        cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600,
+                      }}>
+                      📷 Photos
+                    </button>
+
+                    {/* Retrain button — only show when photos exist */}
+                    {p.photo_count >= 5 && (
+                      <button
+                        onClick={() => handleRetrain(p.id)}
+                        disabled={retrainingPersonId === p.id}
+                        title="Run ML pipeline and enrol"
+                        style={{
+                          background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)',
+                          borderRadius: '6px', padding: '0.3rem 0.6rem', color: '#34d399',
+                          cursor: retrainingPersonId === p.id ? 'wait' : 'pointer',
+                          fontSize: '0.75rem', fontWeight: 600,
+                          opacity: retrainingPersonId === p.id ? 0.6 : 1,
+                        }}>
+                        {retrainingPersonId === p.id ? '⏳ Training…' : '🔁 Retrain'}
+                      </button>
+                    )}
+
+                    {/* Delete */}
+                    <button onClick={() => handleDeletePerson(p.id)} style={{
+                      background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+                      borderRadius: '6px', padding: '0.3rem 0.5rem', color: '#f87171', cursor: 'pointer',
+                    }}>
+                      <X size={14} />
+                    </button>
                   </div>
-                  <span style={{
-                    background: p.is_enrolled ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)',
-                    color: p.is_enrolled ? '#34d399' : '#fbbf24',
-                    border: `1px solid ${p.is_enrolled ? 'rgba(16,185,129,0.3)' : 'rgba(245,158,11,0.3)'}`,
-                    borderRadius: '20px', padding: '0.2rem 0.7rem', fontSize: '0.75rem', fontWeight: 600,
-                  }}>
-                    {p.is_enrolled ? 'Enrolled' : 'Pending'}
-                  </span>
-                  <button onClick={() => handleDeletePerson(p.id)} style={{
-                    background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
-                    borderRadius: '6px', padding: '0.3rem 0.5rem', color: '#f87171', cursor: 'pointer',
-                  }}>
-                    <X size={14} />
-                  </button>
+
+                  {/* ── Photo upload panel (expands inline) ── */}
+                  {uploadingPersonId === p.id && (
+                    <div style={{
+                      marginTop: '0.75rem', paddingTop: '0.75rem',
+                      borderTop: '1px solid rgba(71,85,105,0.3)',
+                    }}>
+                      <p style={{ margin: '0 0 0.5rem', fontSize: '0.8rem', color: '#94a3b8' }}>
+                        Select face photos for <strong>{p.full_name}</strong> (jpeg/png/webp, min 5 for training):
+                      </p>
+                      <input
+                        type="file"
+                        multiple
+                        accept="image/jpeg,image/png,image/webp"
+                        onChange={e => setUploadFiles(Array.from(e.target.files))}
+                        style={{ color: '#f1f5f9', fontSize: '0.8rem', marginBottom: '0.5rem', display: 'block' }}
+                      />
+                      {uploadFiles.length > 0 && (
+                        <p style={{ margin: '0 0 0.5rem', color: '#6366f1', fontSize: '0.78rem' }}>
+                          {uploadFiles.length} file{uploadFiles.length !== 1 ? 's' : ''} selected
+                        </p>
+                      )}
+                      {uploadError && (
+                        <p style={{ margin: '0 0 0.5rem', color: '#f87171', fontSize: '0.78rem' }}>{uploadError}</p>
+                      )}
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button
+                          onClick={() => handleUploadPhotos(p.id)}
+                          disabled={uploading || !uploadFiles.length}
+                          style={{
+                            background: uploading || !uploadFiles.length
+                              ? 'rgba(99,102,241,0.3)' : 'linear-gradient(135deg,#6366f1,#8b5cf6)',
+                            border: 'none', borderRadius: '6px', padding: '0.4rem 0.9rem',
+                            color: '#fff', cursor: uploading || !uploadFiles.length ? 'not-allowed' : 'pointer',
+                            fontSize: '0.8rem', fontWeight: 600,
+                          }}>
+                          {uploading ? 'Uploading…' : 'Upload'}
+                        </button>
+                        <button
+                          onClick={() => { setUploadingPersonId(null); setUploadFiles([]); setUploadError('') }}
+                          style={{
+                            background: 'rgba(71,85,105,0.2)', border: '1px solid rgba(71,85,105,0.3)',
+                            borderRadius: '6px', padding: '0.4rem 0.7rem',
+                            color: '#94a3b8', cursor: 'pointer', fontSize: '0.8rem',
+                          }}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
-              {persons.length === 0 && <p style={{ color: '#64748b' }}>No persons enrolled yet.</p>}
+              {persons.length === 0 && <p style={{ color: '#64748b' }}>No persons added yet. Click "Add Person" to get started.</p>}
             </div>
           </div>
         )}
+
 
         {/* ── Sessions ──────────────────────────────────────────────────── */}
         {tab === 'Sessions' && (

@@ -36,9 +36,11 @@ DELETE /persons/{id}                 → soft-delete a person (is_active = False
 """
 
 from uuid import UUID
-from typing import Optional
+from typing import Optional, List
+import asyncio
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,6 +48,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.dependencies import require_role
 from api.models import Person, User, UserRole
 from db.base import get_db
+from config.settings import TEAM_FACES_DIR, GCS_BUCKET_NAME
 
 router = APIRouter()
 
@@ -265,6 +268,132 @@ async def mark_enrolled(
     await db.commit()
     await db.refresh(person)
     return _person_out(person)
+
+
+@router.post("/{person_id}/photos", response_model=PersonOut)
+async def upload_photos(
+    person_id    : str,
+    files        : List[UploadFile] = File(...),
+    current_user : User = Depends(require_role(["super_admin", "org_admin"])),
+    db           : AsyncSession = Depends(get_db),
+):
+    """
+    Upload one or more face photos for a person.
+
+    - Saves photos to data/raw/TeamFaces/{person.full_name}/
+    - Uploads the same files to GCS at TeamFaces/{person.full_name}/
+    - Updates photo_count and gcs_path in the DB
+    """
+    person = await _get_person_or_404(person_id, db)
+    _check_person_access(current_user, person)
+
+    # ── Validate files ────────────────────────────────────────────────────
+    allowed_types = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
+    for f in files:
+        if f.content_type not in allowed_types:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"File '{f.filename}' is not a supported image type (jpeg/png/webp).",
+            )
+
+    # ── Local folder: data/raw/TeamFaces/<full_name>/ ─────────────────────
+    safe_name  = person.full_name.replace("/", "_").replace("..", "_")
+    person_dir = TEAM_FACES_DIR / safe_name
+    person_dir.mkdir(parents=True, exist_ok=True)
+
+    saved_files: list[Path] = []
+    for upload in files:
+        dest = person_dir / upload.filename
+        contents = await upload.read()
+        dest.write_bytes(contents)
+        saved_files.append(dest)
+
+    # ── Upload to GCS ─────────────────────────────────────────────────────
+    gcs_folder = f"TeamFaces/{safe_name}"
+    try:
+        from storage.gcs_storage import GCSStorage
+        gcs = GCSStorage()
+        for local_path in saved_files:
+            remote_path = f"{gcs_folder}/{local_path.name}"
+            gcs.upload_file(local_path, remote_path)
+    except Exception as e:
+        # Non-fatal: files are saved locally; log and continue
+        import logging
+        logging.getLogger(__name__).warning("GCS upload failed: %s", e)
+
+    # ── Update DB ─────────────────────────────────────────────────────────
+    person.gcs_path    = f"gs://{GCS_BUCKET_NAME}/{gcs_folder}/"
+    person.photo_count = len(list(person_dir.glob("*")))
+
+    await db.commit()
+    await db.refresh(person)
+    return _person_out(person)
+
+
+class RetrainResponse(PersonOut):
+    retrain_result: Optional[dict] = None
+
+
+@router.post("/{person_id}/retrain", response_model=RetrainResponse)
+async def retrain_person(
+    person_id    : str,
+    current_user : User = Depends(require_role(["super_admin", "org_admin"])),
+    db           : AsyncSession = Depends(get_db),
+):
+    """
+    Trigger the ML pipeline (preprocessing → feature_extraction → training)
+    for the given person's photos, then mark them as enrolled.
+
+    Requires at least 5 photos to be uploaded first.
+    """
+    person = await _get_person_or_404(person_id, db)
+    _check_person_access(current_user, person)
+
+    if person.photo_count < 5:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Need at least 5 photos to retrain. Currently {person.photo_count} uploaded.",
+        )
+
+    # Run the pipeline in a thread so we don't block the event loop
+    try:
+        result = await asyncio.get_event_loop().run_in_executor(
+            None, _run_pipeline
+        )
+    except Exception as e:
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            f"Pipeline failed: {e}",
+        )
+
+    # Mark enrolled
+    person.is_enrolled = True
+    await db.commit()
+    await db.refresh(person)
+
+    out = _person_out(person)
+    out["retrain_result"] = result
+    return out
+
+
+def _run_pipeline() -> dict:
+    """Blocking helper — runs preprocessing → feature_extraction → training."""
+    from pipelines import preprocessing, feature_extraction, training
+
+    pre_result  = preprocessing.run()
+    feat_result = feature_extraction.run(valid_members=pre_result["valid_members"])
+    train_result = training.run(
+        X            = feat_result["X"],
+        y            = feat_result["y"],
+        X_raw        = feat_result["X_raw"],
+        y_raw        = feat_result["y_raw"],
+        valid_members= pre_result["valid_members"],
+    )
+    return {
+        "preprocessing"      : {"valid_members": pre_result["valid_members"], "elapsed_s": pre_result["elapsed_s"]},
+        "feature_extraction" : {"n_embeddings": feat_result["n_embeddings"],  "elapsed_s": feat_result["elapsed_s"]},
+        "training"           : {k: v for k, v in train_result.items() if not hasattr(v, "__len__") or isinstance(v, (str, float, int, bool))},
+    }
 
 
 @router.delete("/{person_id}", status_code=status.HTTP_204_NO_CONTENT)

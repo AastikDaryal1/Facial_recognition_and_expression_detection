@@ -11,16 +11,16 @@ import {
   Sparkles, LogOut, LayoutDashboard, Building2, Users,
   ClipboardList, Activity, Zap, Clock, Hash,
   UserCheck, UserX, Trash2, ShieldAlert, RefreshCw,
-  Plus, X, Send, ChevronDown
+  Plus, X, Send, ChevronDown, ScanFace, ChevronUp
 } from 'lucide-react'
 import { useAuth } from '../AuthContext'
 import {
   fetchMetrics, fetchOrganisations, createOrganisation,
   fetchUsers, deactivateUser, activateUser, changeUserRole,
-  deleteUser, inviteUser, fetchAuditLogs,
+  deleteUser, inviteUser, fetchAuditLogs, fetchSessions,
 } from '../api'
 
-const TABS = ['Overview', 'Organisations', 'Users', 'Audit Logs']
+const TABS = ['Overview', 'Organisations', 'Users', 'Sessions', 'Audit Logs']
 
 const ROLE_BADGE = {
   super_admin: { label: 'Super Admin', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
@@ -69,8 +69,13 @@ export default function SuperAdminDashboard() {
   const [orgs, setOrgs] = useState([])
   const [users, setUsers] = useState([])
   const [logs, setLogs] = useState([])
+  const [sessions, setSessions] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  // Sessions tab state
+  const [expandedSession, setExpandedSession] = useState(null)
+  const [sessionOrgFilter, setSessionOrgFilter] = useState('all')
 
   // Invite modal
   const [showInvite, setShowInvite] = useState(false)
@@ -87,10 +92,10 @@ export default function SuperAdminDashboard() {
   const load = async () => {
     setLoading(true); setError('')
     try {
-      const [m, o, u, l] = await Promise.all([
-        fetchMetrics(), fetchOrganisations(), fetchUsers(), fetchAuditLogs()
+      const [m, o, u, l, s] = await Promise.all([
+        fetchMetrics(), fetchOrganisations(), fetchUsers(), fetchAuditLogs(), fetchSessions()
       ])
-      setMetrics(m); setOrgs(o); setUsers(u); setLogs(l)
+      setMetrics(m); setOrgs(o); setUsers(u); setLogs(l); setSessions(s)
     } catch (e) { setError(e.message) }
     setLoading(false)
   }
@@ -374,6 +379,125 @@ export default function SuperAdminDashboard() {
           </div>
         )}
 
+        {/* ── Sessions Tab ─────────────────────────────────────────────── */}
+        {tab === 'Sessions' && (() => {
+          const orgMap = Object.fromEntries(orgs.map(o => [o.id, o.name]))
+          const filtered = sessionOrgFilter === 'all'
+            ? sessions
+            : sessions.filter(s => s.org_id === sessionOrgFilter)
+
+          return (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+                <h3 style={{ margin: 0 }}>All Sessions ({filtered.length}{sessionOrgFilter !== 'all' ? ` in ${orgMap[sessionOrgFilter] || 'org'}` : ' platform-wide'})</h3>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <label style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Filter by org:</label>
+                  <select
+                    value={sessionOrgFilter}
+                    onChange={e => setSessionOrgFilter(e.target.value)}
+                    style={{
+                      background: 'rgba(15,23,42,0.8)', border: '1px solid rgba(71,85,105,0.4)',
+                      borderRadius: '6px', padding: '0.35rem 0.6rem',
+                      color: '#f1f5f9', fontSize: '0.8rem', cursor: 'pointer',
+                    }}>
+                    <option value="all">All Organisations</option>
+                    {orgs.map(o => (
+                      <option key={o.id} value={o.id}>{o.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {filtered.length === 0
+                ? <p style={{ color: '#64748b' }}>No sessions found{sessionOrgFilter !== 'all' ? ' for this organisation' : ''}.</p>
+                : (
+                  <div style={{ display: 'grid', gap: '0.75rem' }}>
+                    {filtered.map(s => {
+                      const isExpanded = expandedSession === s.id
+                      const results = s.results_json?.results || (Array.isArray(s.results_json) ? s.results_json : [])
+                      const known = results.filter(f => f.name && f.name.toUpperCase() !== 'UNKNOWN')
+                      const unknown = results.filter(f => !f.name || f.name.toUpperCase() === 'UNKNOWN')
+                      const orgName = orgMap[s.org_id] || s.org_id?.slice(0, 8) || '—'
+
+                      return (
+                        <div key={s.id} style={{
+                          background: 'rgba(15,23,42,0.6)',
+                          border: `1px solid ${isExpanded ? 'rgba(99,102,241,0.4)' : 'rgba(71,85,105,0.3)'}`,
+                          borderRadius: '10px', overflow: 'hidden', transition: 'border-color 0.2s',
+                        }}>
+                          {/* ── Header row ── */}
+                          <div
+                            onClick={() => setExpandedSession(isExpanded ? null : s.id)}
+                            style={{ padding: '1rem 1.25rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                            <ScanFace size={16} color="#6366f1" style={{ flexShrink: 0 }} />
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <p style={{ margin: 0, fontWeight: 600, fontSize: '0.875rem' }}>
+                                {known.length} identified · {unknown.length} unknown · {s.n_faces} face{s.n_faces !== 1 ? 's' : ''}
+                              </p>
+                              <p style={{ margin: '0.15rem 0 0', color: '#64748b', fontSize: '0.75rem' }}>
+                                {new Date(s.created_at).toLocaleString()} · {s.elapsed_s?.toFixed(2)}s
+                              </p>
+                            </div>
+
+                            {/* Org badge */}
+                            <span style={{
+                              background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)',
+                              borderRadius: '20px', padding: '0.2rem 0.7rem',
+                              color: '#818cf8', fontSize: '0.73rem', fontWeight: 600, whiteSpace: 'nowrap',
+                            }}>
+                              🏢 {orgName}
+                            </span>
+
+                            {s.note && (
+                              <span style={{ color: '#fbbf24', fontSize: '0.75rem', fontStyle: 'italic', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                📝 {s.note}
+                              </span>
+                            )}
+                            {isExpanded ? <ChevronUp size={14} color="#64748b" /> : <ChevronDown size={14} color="#64748b" />}
+                          </div>
+
+                          {/* ── Expanded details (read-only) ── */}
+                          {isExpanded && (
+                            <div style={{ padding: '0 1.25rem 1rem', borderTop: '1px solid rgba(71,85,105,0.2)' }}>
+                              {results.length > 0 && (
+                                <div style={{ marginTop: '0.75rem', display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                                  {results.map((f, i) => {
+                                    const isKnown = f.name && f.name.toUpperCase() !== 'UNKNOWN'
+                                    return (
+                                      <span key={i} style={{
+                                        background: isKnown ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+                                        border: `1px solid ${isKnown ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`,
+                                        color: isKnown ? '#34d399' : '#f87171',
+                                        borderRadius: '6px', padding: '0.2rem 0.6rem', fontSize: '0.75rem',
+                                      }}>
+                                        {f.name || 'Unknown'}{f.emotion ? ` · ${f.emotion}` : ''}
+                                      </span>
+                                    )
+                                  })}
+                                </div>
+                              )}
+                              {s.annotated_image && (
+                                <img
+                                  src={`data:image/jpeg;base64,${s.annotated_image}`}
+                                  alt="annotated"
+                                  style={{ marginTop: '0.75rem', maxWidth: '100%', borderRadius: '8px', border: '1px solid rgba(71,85,105,0.3)' }}
+                                />
+                              )}
+                              {results.length === 0 && !s.annotated_image && (
+                                <p style={{ color: '#475569', fontSize: '0.8rem', marginTop: '0.75rem' }}>No result details stored.</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              }
+            </div>
+          )
+        })()}
+
         {/* ── Audit Logs Tab ────────────────────────────────────────────── */}
         {tab === 'Audit Logs' && (
           <div>
@@ -391,17 +515,17 @@ export default function SuperAdminDashboard() {
                       (log.target_id ? log.target_id.slice(0, 8) + '...' : '—')
 
                     const ACTION_LABELS = {
-                      'auth.signup'        : '🔐 Super admin account created',
-                      'auth.invite'        : '📨 Invite sent',
-                      'auth.invite_accept' : '✅ Invite accepted / User registered',
-                      'user.role_change'   : '🔄 Role changed',
-                      'user.deactivate'    : '🚫 User deactivated',
-                      'user.activate'      : '✅ User reactivated',
-                      'user.delete'        : '🗑️ User deleted',
-                      'org.create'         : '🏢 Organisation created',
-                      'org.deactivate'     : '🚫 Organisation deactivated',
-                      'org.activate'       : '✅ Organisation reactivated',
-                      'org.delete'         : '🗑️ Organisation deleted',
+                      'auth.signup': '🔐 Super admin account created',
+                      'auth.invite': '📨 Invite sent',
+                      'auth.invite_accept': '✅ Invite accepted / User registered',
+                      'user.role_change': '🔄 Role changed',
+                      'user.deactivate': '🚫 User deactivated',
+                      'user.activate': '✅ User reactivated',
+                      'user.delete': '🗑️ User deleted',
+                      'org.create': '🏢 Organisation created',
+                      'org.deactivate': '🚫 Organisation deactivated',
+                      'org.activate': '✅ Organisation reactivated',
+                      'org.delete': '🗑️ Organisation deleted',
                     }
                     const actionLabel = ACTION_LABELS[log.action] || log.action
 
