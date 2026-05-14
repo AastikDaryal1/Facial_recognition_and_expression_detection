@@ -42,15 +42,16 @@ router = APIRouter()
 # ─────────────────────────────────────────────────────────────────────────────
 
 class SessionOut(BaseModel):
-    id           : str
-    user_id      : str
-    org_id       : Optional[str]
-    n_faces      : int
-    n_identified : int
-    elapsed_s    : float
-    results_json : Optional[dict]
-    note         : Optional[str]
-    created_at   : str
+    id              : str
+    user_id         : str
+    org_id          : Optional[str]
+    n_faces         : int
+    n_identified    : int
+    elapsed_s       : float
+    results_json    : Optional[dict]
+    annotated_image : Optional[str]
+    note            : Optional[str]
+    created_at      : str
 
     model_config = {"from_attributes": True}
 
@@ -65,15 +66,16 @@ class NoteRequest(BaseModel):
 
 def _session_out(s: Session) -> dict:
     return {
-        "id"          : str(s.id),
-        "user_id"     : str(s.user_id),
-        "org_id"      : str(s.org_id) if s.org_id else None,
-        "n_faces"     : s.n_faces,
-        "n_identified": s.n_identified,
-        "elapsed_s"   : s.elapsed_s,
-        "results_json": s.results_json,
-        "note"        : s.note,
-        "created_at"  : s.created_at.isoformat() if s.created_at else None,
+        "id"             : str(s.id),
+        "user_id"        : str(s.user_id),
+        "org_id"         : str(s.org_id) if s.org_id else None,
+        "n_faces"        : s.n_faces,
+        "n_identified"   : s.n_identified,
+        "elapsed_s"      : s.elapsed_s,
+        "results_json"   : s.results_json,
+        "annotated_image": s.annotated_image,
+        "note"           : s.note,
+        "created_at"     : s.created_at.isoformat() if s.created_at else None,
     }
 
 

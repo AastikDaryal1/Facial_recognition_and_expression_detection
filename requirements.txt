@@ -25,10 +25,6 @@ pydantic==2.7.1
 python-multipart==0.0.9     # needed for file uploads
 slowapi==0.1.9              # rate limiting
 
-# ── Auth ──────────────────────────────────────────────────────────────────────
-bcrypt==4.0.1
-passlib[bcrypt]==1.7.4
-
 # ── Config / Env ──────────────────────────────────────────────────────────────
 python-dotenv==1.0.1
 
@@ -43,5 +39,6 @@ asyncpg==0.29.0
 alembic==1.13.1
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
 redis==5.0.4
 resend==2.0.0

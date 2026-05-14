@@ -27,21 +27,21 @@ ENV       = os.getenv("ENV", "development")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
 # ── Google Cloud Storage ──────────────────────────────────────────────────────
-GCS_PROJECT_ID = os.getenv("GCS_PROJECT_ID", "")
+GCS_PROJECT_ID  = os.getenv("GCS_PROJECT_ID", "")
 GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "")
-GCS_KEY_PATH   = os.getenv("GCS_KEY_PATH", "secrets/gcs_key.json")
+GCS_KEY_PATH    = os.getenv("GCS_KEY_PATH", "secrets/gcs_key.json")
 
 # Remote paths inside the bucket
-GCS_TEAM_ZIP          = "TeamFaces.zip"
-GCS_RAFDB_ZIP         = "raf-db.zip"
-GCS_MODEL_PREFIX      = "saved_model"
+GCS_TEAM_ZIP     = "TeamFaces.zip"
+GCS_RAFDB_ZIP    = "raf-db.zip"
+GCS_MODEL_PREFIX = "saved_model"
 
 # ── Local data paths ──────────────────────────────────────────────────────────
-DATA_DIR          = ROOT_DIR / "data"
-RAW_DIR           = DATA_DIR / "raw"
-PROCESSED_DIR     = DATA_DIR / "processed"
-TEAM_FACES_DIR    = RAW_DIR  / "TeamFaces"
-RAFDB_DIR         = RAW_DIR  / "raf-db"
+DATA_DIR       = ROOT_DIR / "data"
+RAW_DIR        = DATA_DIR / "raw"
+PROCESSED_DIR  = DATA_DIR / "processed"
+TEAM_FACES_DIR = RAW_DIR  / "TeamFaces"
+RAFDB_DIR      = RAW_DIR  / "raf-db"
 
 for _d in [RAW_DIR, PROCESSED_DIR, TEAM_FACES_DIR]:
     _d.mkdir(parents=True, exist_ok=True)
@@ -56,22 +56,23 @@ MODEL_FILES = {
 }
 
 # ── Training hyperparameters ──────────────────────────────────────────────────
-MIN_PHOTOS_PER_PERSON  = 5
-SVM_C                  = 10.0
-SVM_KERNEL             = "rbf"
-TRAIN_TEST_SPLIT       = 0.2
-AUGMENT_NOISE_STD      = 0.01
-RANDOM_STATE           = 42
+MIN_PHOTOS_PER_PERSON = 5
+SVM_C                 = 10.0
+SVM_KERNEL            = "rbf"
+TRAIN_TEST_SPLIT      = 0.2
+AUGMENT_NOISE_STD     = 0.01
+RANDOM_STATE          = 42
 
 # ── Identity / recognition thresholds ────────────────────────────────────────
-SVM_CONFIDENCE_THRESHOLD    = float(os.getenv("SVM_CONFIDENCE_THRESHOLD",  "0.60"))
-COSINE_SIMILARITY_THRESHOLD = float(os.getenv("COSINE_SIMILARITY_THRESHOLD","0.40"))
+SVM_CONFIDENCE_THRESHOLD    = float(os.getenv("SVM_CONFIDENCE_THRESHOLD",   "0.60"))
+COSINE_SIMILARITY_THRESHOLD = float(os.getenv("COSINE_SIMILARITY_THRESHOLD", "0.40"))
 
 # ── Emotion inference thresholds ─────────────────────────────────────────────
-EMOTION_CONFIDENCE_THRESHOLD = float(os.getenv("EMOTION_CONFIDENCE_THRESHOLD", "55.0"))
-VOTE_BUFFER_SIZE             = 5
-COOLDOWN_SECONDS             = 0.4
-HARD_SWITCH_THRESHOLD        = 75.0
+EMOTION_CONFIDENCE_THRESHOLD  = float(os.getenv("EMOTION_CONFIDENCE_THRESHOLD",  "55.0"))
+EMOTION_UNCERTAINTY_THRESHOLD = float(os.getenv("EMOTION_UNCERTAINTY_THRESHOLD", "0.45"))  # from Shubh
+VOTE_BUFFER_SIZE              = 5
+COOLDOWN_SECONDS              = 0.4
+HARD_SWITCH_THRESHOLD         = 75.0
 
 TRACKED_EMOTIONS = ["happy", "neutral", "surprise", "angry", "sad", "fear", "disgust"]
 
@@ -130,6 +131,13 @@ MAX_UPLOAD_SIZE_MB  = int(os.getenv("MAX_UPLOAD_SIZE_MB", "5"))
 MAX_RUNTIME_MINUTES = int(os.getenv("MAX_RUNTIME_MINUTES", "10"))
 RATE_LIMIT          = os.getenv("RATE_LIMIT", "10/minute")
 LOW_LIGHT_THRESHOLD = int(os.getenv("LOW_LIGHT_THRESHOLD", "40"))
+
+# ── Production Face Validation Thresholds (from Shubh) ───────────────────────
+FACE_CONFIDENCE_THRESHOLD = float(os.getenv("FACE_CONFIDENCE_THRESHOLD", "0.95"))
+MIN_FACE_WIDTH            = int(os.getenv("MIN_FACE_WIDTH", "100"))
+MIN_FACE_HEIGHT           = int(os.getenv("MIN_FACE_HEIGHT", "100"))
+MAX_FACE_AREA_FRACTION    = float(os.getenv("MAX_FACE_AREA_FRACTION", "0.35"))
+FACE_BLUR_THRESHOLD       = float(os.getenv("FACE_BLUR_THRESHOLD", "120.0"))
 
 # ── Database ──────────────────────────────────────────────────────────────────
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://faceapp:faceapp_pass@localhost:5432/face_emotion_db")

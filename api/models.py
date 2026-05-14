@@ -127,6 +127,9 @@ class Session(Base):
     # Full JSON results from inference (list of FaceResult dicts)
     results_json : Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
+    # Base64-encoded annotated JPEG — stored so dashboards can show it later
+    annotated_image : Mapped[str | None] = mapped_column(Text, nullable=True)
+
     # Optional note added by org_admin
     note         : Mapped[str | None] = mapped_column(Text, nullable=True)
 

@@ -289,12 +289,13 @@ async def predict_image(
     # Save session to DB
     try:
         session_rec = Session(
-            user_id      = current_user.id,
-            org_id       = current_user.org_id,
-            n_faces      = result["n_faces"],
-            n_identified = result["n_identified"],
-            elapsed_s    = round(elapsed, 3),
-            results_json = result["results"],
+            user_id         = current_user.id,
+            org_id          = current_user.org_id,
+            n_faces         = result["n_faces"],
+            n_identified    = result["n_identified"],
+            elapsed_s       = round(elapsed, 3),
+            results_json    = result["results"],
+            annotated_image = annotated_b64,
         )
         db.add(session_rec)
         await db.commit()
@@ -350,15 +351,19 @@ async def predict_base64(
     _state["request_count"] += 1
     _state["total_latency"]  += elapsed
 
+    # Encode annotated image to base64 for frontend preview and DB storage
+    annotated_b64 = _encode_annotated_image(result)
+
     # Save session to DB
     try:
         session_rec = Session(
-            user_id      = current_user.id,
-            org_id       = current_user.org_id,
-            n_faces      = result["n_faces"],
-            n_identified = result["n_identified"],
-            elapsed_s    = round(elapsed, 3),
-            results_json = result["results"],
+            user_id         = current_user.id,
+            org_id          = current_user.org_id,
+            n_faces         = result["n_faces"],
+            n_identified    = result["n_identified"],
+            elapsed_s       = round(elapsed, 3),
+            results_json    = result["results"],
+            annotated_image = annotated_b64,
         )
         db.add(session_rec)
         await db.commit()
@@ -367,10 +372,11 @@ async def predict_base64(
         log.error("Failed to save session record: %s", e)
 
     return PredictResponse(
-        n_faces      = result["n_faces"],
-        n_identified = result["n_identified"],
-        results      = [FaceResult(**r) for r in result["results"]],
-        elapsed_s    = round(elapsed, 3),
+        n_faces         = result["n_faces"],
+        n_identified    = result["n_identified"],
+        results         = [FaceResult(**r) for r in result["results"]],
+        elapsed_s       = round(elapsed, 3),
+        annotated_image = annotated_b64,
     )
 
 

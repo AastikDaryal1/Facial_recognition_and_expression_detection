@@ -20,7 +20,7 @@ from typing import Optional
 
 import numpy as np
 
-from config.settings import EMOTION_GROUPS
+from config.settings import EMOTION_GROUPS, EMOTION_UNCERTAINTY_THRESHOLD
 from utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -92,7 +92,15 @@ def infer_emotion(emotion_scores: dict[str, float]) -> tuple[str, float]:
 
     # Default
     dominant = max(emotion_scores, key=emotion_scores.get)
-    return group_emotion(dominant), emotion_scores[dominant]
+    confidence = emotion_scores[dominant]
+    
+    # Handle uncertainty (Production Rule 4)
+    if confidence < (EMOTION_UNCERTAINTY_THRESHOLD * 100):
+        # DeepFace scores are 0-100, threshold is likely 0-1
+        log.debug("Emotion uncertainty: %s (%.1f%%) < threshold", dominant, confidence)
+        return "uncertain", confidence
+
+    return group_emotion(dominant), confidence
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -125,7 +133,7 @@ def detect_with_calibration(
             img_path          = target_img,
             actions           = ["emotion"],
             detector_backend  = detector_backend,
-            enforce_detection = False,
+            enforce_detection = True,  # Critical: Enforce valid face before analysis
             silent            = True,
         )
         if isinstance(result, dict):

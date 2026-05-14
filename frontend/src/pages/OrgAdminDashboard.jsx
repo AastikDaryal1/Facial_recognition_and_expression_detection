@@ -510,6 +510,25 @@ export default function OrgAdminDashboard() {
                             padding: '1rem 1.25rem',
                             background: 'rgba(15,23,42,0.4)',
                           }}>
+
+                            {/* Annotated image */}
+                            {s.annotated_image && (
+                              <div style={{ marginBottom: '1rem' }}>
+                                <p style={{ margin: '0 0 0.5rem', fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                  📸 Annotated Image
+                                </p>
+                                <img
+                                  src={`data:image/jpeg;base64,${s.annotated_image}`}
+                                  alt="Annotated detection"
+                                  style={{
+                                    width: '100%', maxWidth: '480px', borderRadius: '8px',
+                                    border: '1px solid rgba(99,102,241,0.3)',
+                                    display: 'block',
+                                  }}
+                                />
+                              </div>
+                            )}
+
                             {results.length === 0 ? (
                               <p style={{ color: '#64748b', fontSize: '0.85rem', margin: 0 }}>No detailed results stored for this session.</p>
                             ) : (

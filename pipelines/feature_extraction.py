@@ -68,7 +68,7 @@ def _warmup_model() -> None:
         DeepFace.represent(
             tmp_path,
             model_name=DEEPFACE_MODEL,
-            enforce_detection=False,
+            enforce_detection=True,
             detector_backend="opencv",
         )
         log.info("FaceNet model warmed up.")
@@ -91,7 +91,7 @@ def _extract_embedding(img_bgr: np.ndarray) -> Optional[np.ndarray]:
         result = DeepFace.represent(
             img_path=tmp_path,
             model_name=DEEPFACE_MODEL,
-            enforce_detection=False,
+            enforce_detection=True,
             detector_backend="opencv",
         )
         if result:

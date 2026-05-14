@@ -44,6 +44,7 @@ from config.settings import (
 )
 from models.emotion_model import infer_emotion
 from utils.logger import get_logger
+from utils.validation import validate_face_region
 
 log = get_logger(__name__)
 
@@ -156,17 +157,26 @@ def run(camera_index: int = 0, window_name: str = "Emotion Detector") -> None:
                 result = DeepFace.analyze(
                     frame,
                     actions=["emotion"],
-                    enforce_detection=False,
+                    enforce_detection=True, # Critical: Enforce valid face
+                    silent=True
                 )
                 if isinstance(result, dict):
                     result = [result]
 
                 if result:
                     first          = result[0]
+                    region         = first.get("region", {})
+                    
+                    # ── Quality Gatekeeper ─────────────────────────────────────
+                    conf = first.get("confidence", 1.0)
+                    is_valid, reason = validate_face_region(region, frame, frame.shape[:2], conf)
+                    if not is_valid:
+                        log.debug("  [REJECTED] Realtime Frame: %s", reason)
+                        emotion_buffer.clear()
+                        continue
+
                     emotion_scores = first["emotion"]
                     dominant_raw   = first["dominant_emotion"]
-                    region         = first.get("region", {})
-
                     inferred_emotion, inferred_conf = infer_emotion(emotion_scores)
                     effective_conf = inferred_conf
 

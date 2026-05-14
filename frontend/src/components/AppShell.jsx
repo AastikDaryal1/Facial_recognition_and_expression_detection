@@ -2,25 +2,23 @@
  * src/components/AppShell.jsx
  * ────────────────────────────
  * Top navigation bar + page layout wrapper.
- * Extracted from old App.jsx — same design, JWT auth replacing API key.
  *
- * Changes from old version:
- *   - No more API key modal
- *   - Login/logout uses AuthContext (JWT)
- *   - Nav items change based on role
- *   - Shows user email + role badge in navbar
+ * Auth: JWT via AuthContext (veerojasvi)
+ * Mobile menu: hamburger toggle (from Shubh's mobile responsiveness update)
  */
 
+import { useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import {
   Sparkles,
   LogOut,
   LayoutDashboard,
-  Users,
   Upload,
   Camera,
   Home,
   ClipboardList,
+  Menu,
+  X,
 } from 'lucide-react'
 import { useAuth } from '../AuthContext'
 
@@ -54,6 +52,11 @@ const ROLE_BADGE = {
 export default function AppShell({ children }) {
   const { user, logout } = useAuth()
 
+  // Mobile menu state — Shubh's mobile responsiveness
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const toggleMobileMenu = () => setIsMobileMenuOpen(prev => !prev)
+  const closeMobileMenu  = () => setIsMobileMenuOpen(false)
+
   const navItems  = user ? (NAV_ITEMS[user.role] || NAV_ITEMS.user) : NAV_ITEMS.user
   const roleBadge = user ? ROLE_BADGE[user.role] : null
 
@@ -62,18 +65,24 @@ export default function AppShell({ children }) {
       <header className="topbar glass-card">
 
         {/* Brand */}
-        <Link className="brand" to="/">
+        <Link className="brand" to="/" onClick={closeMobileMenu}>
           <Sparkles size={18} />
           <span>VisionX</span>
         </Link>
 
-        {/* Nav links */}
-        <nav className="nav">
+        {/* Hamburger toggle — visible on mobile only (CSS controls display) */}
+        <button className="mobile-toggle" onClick={toggleMobileMenu} aria-label="Toggle menu">
+          {isMobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
+        </button>
+
+        {/* Nav — gains 'mobile-open' class when hamburger is active */}
+        <nav className={`nav ${isMobileMenuOpen ? 'mobile-open' : ''}`}>
           {navItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              onClick={closeMobileMenu}
             >
               {item.label}
             </NavLink>
@@ -105,10 +114,10 @@ export default function AppShell({ children }) {
 
               {/* Email */}
               <span style={{
-                color    : '#64748b',
-                fontSize : '0.8rem',
-                maxWidth : '140px',
-                overflow : 'hidden',
+                color       : '#64748b',
+                fontSize    : '0.8rem',
+                maxWidth    : '140px',
+                overflow    : 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace  : 'nowrap',
               }}>
@@ -117,7 +126,7 @@ export default function AppShell({ children }) {
 
               {/* Logout button */}
               <button
-                onClick = {logout}
+                onClick={() => { logout(); closeMobileMenu() }}
                 className="secondary-btn"
                 style={{
                   display    : 'flex',

@@ -40,11 +40,17 @@ from config.settings import (
     EMOTION_HEX,
     FACE_DETECTOR_BACKENDS,
     LOW_LIGHT_THRESHOLD,
+    FACE_CONFIDENCE_THRESHOLD,
+    MIN_FACE_WIDTH,
+    MIN_FACE_HEIGHT,
+    MAX_FACE_AREA_FRACTION,
+    FACE_BLUR_THRESHOLD,
 )
 from models.emotion_model import detect_with_calibration
 from models.face_model import FaceRecognizer
 from utils.image_utils import bgr_to_rgb, load_image, save_image
 from utils.logger import get_logger
+from utils.validation import validate_face_region
 
 log = get_logger(__name__)
 
@@ -63,7 +69,7 @@ def _detect_faces(img_bgr: np.ndarray, img_path: str) -> list:
             faces = DeepFace.extract_faces(
                 img_path=img_path,
                 detector_backend=backend,
-                enforce_detection=False,
+                enforce_detection=True,  # Critical: Enforce valid face
                 align=True,
             )
             if faces:
@@ -80,13 +86,14 @@ def _get_embedding(face_bgr: np.ndarray) -> Optional[np.ndarray]:
         result = DeepFace.represent(
             img_path=face_bgr,
             model_name="Facenet",
-            enforce_detection=False,
+            enforce_detection=True,  # Enforce for stability
             detector_backend="skip",
         )
         return np.array(result[0]["embedding"], dtype=np.float32) if result else None
     except Exception as exc:
         log.debug("Embedding error: %s", exc)
         return None
+
 
 
 def _annotate_image(
@@ -213,12 +220,15 @@ def run(
 
     for i, face_obj in enumerate(face_objs):
         region = face_obj.get("facial_area", face_obj.get("region", {}))
-        x, y   = region.get("x", 0), region.get("y", 0)
-        w, h   = region.get("w", 0), region.get("h", 0)
-
-        if w < MIN_FACE_SIZE or h < MIN_FACE_SIZE:
-            log.debug("  Face %d too small (%d×%d) — skipped", i + 1, w, h)
+        
+        # ── Quality Gatekeeper ─────────────────────────────────────────────
+        conf = face_obj.get("confidence", 1.0)
+        is_valid, reason = validate_face_region(region, img_bgr, (h_orig, w_orig), conf, i)
+        if not is_valid:
+            log.warning("  [REJECTED] Face %d: %s", i + 1, reason)
             continue
+            
+        x, y, w, h = region["x"], region["y"], region["w"], region["h"]
 
         x1 = max(0, x - PAD);  y1 = max(0, y - PAD)
         x2 = min(w_orig, x + w + PAD);  y2 = min(h_orig, y + h + PAD)
