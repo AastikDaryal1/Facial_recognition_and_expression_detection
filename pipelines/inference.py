@@ -69,7 +69,7 @@ def _detect_faces(img_bgr: np.ndarray, img_path: str) -> list:
             faces = DeepFace.extract_faces(
                 img_path=img_path,
                 detector_backend=backend,
-                enforce_detection=True,  # Critical: Enforce valid face
+                enforce_detection=False,  # Allow best-effort
                 align=True,
             )
             if faces:
@@ -222,14 +222,12 @@ def run(
     for i, face_obj in enumerate(face_objs):
         region = face_obj.get("facial_area", face_obj.get("region", {}))
         
-        # ── Quality Gatekeeper ─────────────────────────────────────────────
-        conf = face_obj.get("confidence", 1.0)
-        is_valid, reason = validate_face_region(region, img_bgr, (h_orig, w_orig), conf, i)
-        if not is_valid:
-            log.warning("  [REJECTED] Face %d: %s", i + 1, reason)
+        x, y   = region.get("x", 0), region.get("y", 0)
+        w, h   = region.get("w", 0), region.get("h", 0)
+
+        if w < MIN_FACE_SIZE or h < MIN_FACE_SIZE:
+            log.debug("  Face %d too small (%d×%d) — skipped", i + 1, w, h)
             continue
-            
-        x, y, w, h = region["x"], region["y"], region["w"], region["h"]
 
         x1 = max(0, x - PAD);  y1 = max(0, y - PAD)
         x2 = min(w_orig, x + w + PAD);  y2 = min(h_orig, y + h + PAD)

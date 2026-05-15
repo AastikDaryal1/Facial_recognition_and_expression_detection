@@ -133,7 +133,7 @@ def detect_with_calibration(
             img_path          = target_img,
             actions           = ["emotion"],
             detector_backend  = detector_backend,
-            enforce_detection = True,  # Critical: Enforce valid face before analysis
+            enforce_detection = False,  # Allow best-effort on provided crop
             silent            = True,
         )
         if isinstance(result, dict):

@@ -300,8 +300,8 @@ async def predict_base64(
         raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, f"File size exceeds {MAX_UPLOAD_SIZE_MB}MB limit.")
 
     try:
-        # Live mode optimization: skip crop generation and annotation
-        result = _run_inference(image_bytes, payload.filename, save_annotated=False, generate_crops=False)
+        # Live mode: Enable crop generation for better visual feedback
+        result = _run_inference(image_bytes, payload.filename, save_annotated=False, generate_crops=True)
     except Exception as exc:
         log.error("Inference failed: %s", exc, exc_info=True)
         raise HTTPException(500, f"Inference error: {exc}")
