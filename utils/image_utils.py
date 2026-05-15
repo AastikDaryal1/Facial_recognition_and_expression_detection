@@ -12,6 +12,10 @@ from typing import Optional, Tuple
 
 import cv2
 import numpy as np
+from PIL import Image, ImageOps
+from pillow_heif import register_heif_opener
+
+register_heif_opener()
 
 from utils.logger import get_logger
 
@@ -20,7 +24,7 @@ from utils.logger import get_logger
 log = get_logger(__name__)
 
 # Supported image extensions (lower-case)
-IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".heic", ".heif"}
 
 
 def is_image_file(path: Path) -> bool:
@@ -30,17 +34,33 @@ def is_image_file(path: Path) -> bool:
 def load_image(path: str | Path, max_width: int = 0) -> Optional[np.ndarray]:
     """
     Load an image from disk.
-
-    • Supports HEIC/HEIF via pillow-heif (auto-registered at import time).
-    • Optionally down-scales images wider than `max_width`.
-    Optionally down-scales images wider than `max_width`.
-
-    Returns
-    -------
-    BGR numpy array or None if loading fails.
+    Supports HEIC/HEIF and respects EXIF orientation.
+    Returns BGR numpy array.
     """
     path = Path(path)
-    img = cv2.imread(str(path))
+    suffix = path.suffix.lower()
+
+    img = None
+    try:
+        if suffix in {".heic", ".heif"}:
+            # Use Pillow for HEIC
+            pil_img = Image.open(path)
+            pil_img = ImageOps.exif_transpose(pil_img)
+            img_rgb = np.array(pil_img.convert("RGB"))
+            img = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
+        else:
+            # Try OpenCV first for standard formats
+            img = cv2.imread(str(path))
+            
+            # If OpenCV fails, or for some JPGs with complex EXIF, try Pillow fallback
+            if img is None:
+                pil_img = Image.open(path)
+                pil_img = ImageOps.exif_transpose(pil_img)
+                img_rgb = np.array(pil_img.convert("RGB"))
+                img = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
+    except Exception as e:
+        log.warning("Could not load image %s: %s", path, e)
+        return None
 
     if img is None:
         log.warning("Could not load image: %s", path)
