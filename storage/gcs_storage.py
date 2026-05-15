@@ -62,6 +62,18 @@ class GCSStorage:
     def blob_exists(self, remote_path: str) -> bool:
         return self._bucket.blob(remote_path).exists()
 
+    def get_blob_updated(self, remote_path: str):
+        """Return the 'updated' timestamp of a blob, or None if it doesn't exist."""
+        blob = self._bucket.get_blob(remote_path)
+        return blob.updated if blob else None
+
+    def get_latest_blob_updated(self, prefix: str):
+        """Find the newest 'updated' timestamp among all blobs with this prefix."""
+        blobs = list(self._bucket.list_blobs(prefix=prefix))
+        if not blobs:
+            return None
+        return max(b.updated for b in blobs)
+
     def all_blobs_exist(self, remote_paths: List[str]) -> bool:
         return all(self.blob_exists(p) for p in remote_paths)
 
@@ -73,6 +85,24 @@ class GCSStorage:
         self._bucket.blob(remote_path).download_to_filename(str(local_path))
         log.info("Downloaded %s (%.1f MB)", local_path.name, local_path.stat().st_size / 1e6)
         return local_path
+
+    def download_folder(self, remote_prefix: str, local_dir: str | Path) -> None:
+        """Recursively download all blobs under a prefix."""
+        local_dir = Path(local_dir)
+        local_dir.mkdir(parents=True, exist_ok=True)
+        blobs = self._bucket.list_blobs(prefix=remote_prefix)
+        for blob in blobs:
+            if blob.name.endswith("/"):
+                continue
+            
+            # e.g. team_faces/Ojas/img.jpg -> local_dir/Ojas/img.jpg
+            relative_path = blob.name[len(remote_prefix):].lstrip("/")
+            dest_path = local_dir / relative_path
+            dest_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            log.debug("Downloading %s → %s", blob.name, dest_path)
+            blob.download_to_filename(str(dest_path))
+        log.info("Folder download complete: %s", remote_prefix)
 
     def download_and_extract_zip(
         self,

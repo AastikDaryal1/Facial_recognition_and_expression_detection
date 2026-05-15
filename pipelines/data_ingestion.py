@@ -96,15 +96,21 @@ def run(force_retrain: bool = False) -> dict:
     # ── Step 2: Download + extract TeamFaces ─────────────────────────────
     log.info("Step 2: Downloading TeamFaces dataset …")
     team_zip = RAW_DIR / "TeamFaces.zip"
-    if not team_zip.exists():
-        gcs.download_and_extract_zip(GCS_TEAM_ZIP, team_zip, RAW_DIR)
+    
+    # Check if zip exists in GCS, if not, try the folder
+    if gcs.blob_exists(GCS_TEAM_ZIP):
+        if not team_zip.exists():
+            gcs.download_and_extract_zip(GCS_TEAM_ZIP, team_zip, RAW_DIR)
+        else:
+            log.info("  TeamFaces.zip already present, skipping download.")
+            if not TEAM_FACES_DIR.exists():
+                import zipfile
+                log.info("  Extracting existing zip …")
+                with zipfile.ZipFile(str(team_zip)) as zf:
+                    zf.extractall(str(RAW_DIR))
     else:
-        log.info("  TeamFaces.zip already present, skipping download.")
-        if not TEAM_FACES_DIR.exists():
-            import zipfile
-            log.info("  Extracting existing zip …")
-            with zipfile.ZipFile(str(team_zip)) as zf:
-                zf.extractall(str(RAW_DIR))
+        log.info("  ⚠️ TeamFaces.zip not found in GCS. Falling back to folder download: team_faces/")
+        gcs.download_folder("team_faces/", TEAM_FACES_DIR)
 
     # ── Step 3: Download + extract raf-db ────────────────────────────────
     log.info("Step 3: Downloading raf-db dataset …")

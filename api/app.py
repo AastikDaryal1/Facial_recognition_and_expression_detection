@@ -29,12 +29,13 @@ Usage
 
 import base64
 import time
+import datetime
 import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, File, HTTPException, UploadFile, status, Depends, Request
+from fastapi import FastAPI, File, HTTPException, UploadFile, status, Depends, Request, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -60,14 +61,16 @@ log = get_logger(__name__)
 _state: dict = {
     "recognizer"    : None,
     "request_count" : 0,
-    "total_latency" : 0.0,
-    "startup_time"  : None,
+    "total_latency": 0.0,
+    "startup_time": None,
+    "last_gcs_sync": None,
+    "gcs_watcher_status": "Idle", # Idle or Syncing
 }
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Create DB tables, load model artefacts once on startup; release on shutdown."""
+    """Create DB tables, load model artefacts once on startup; start GCS watcher."""
 
     # ── Database ──────────────────────────────────────────────────────────────
     async with engine.begin() as conn:
@@ -77,13 +80,70 @@ async def lifespan(app: FastAPI):
     # ── Model ─────────────────────────────────────────────────────────────────
     log.info("API startup — loading model artefacts …")
     _state["startup_time"] = time.time()
+    _load_model()
+
+    # ── GCS Watcher ───────────────────────────────────────────────────────────
+    import asyncio
+    from config.settings import GCS_TEAM_ZIP
+    from storage.gcs_storage import GCSStorage
+    from pipelines import data_ingestion, preprocessing, feature_extraction, training
+
+    async def gcs_watcher():
+        """Background loop to check for dataset updates on GCS."""
+        await asyncio.sleep(10) # wait for startup to settle
+        gcs = GCSStorage()
+        
+        # Monitor the folder 'team_faces/'
+        prefix = "team_faces/"
+        last_updated = gcs.get_latest_blob_updated(prefix)
+        log.info("GCS Watcher started. Monitoring folder: %s (initial: %s)", prefix, last_updated)
+
+        while True:
+            try:
+                await asyncio.sleep(60) # Poll every 1 minute
+                current_updated = gcs.get_latest_blob_updated(prefix)
+                
+                if current_updated and (last_updated is None or current_updated > last_updated):
+                    _state["gcs_watcher_status"] = "Syncing"
+                    log.info("🔔 GCS CHANGE DETECTED! Dataset folder '%s' updated at %s. Starting auto-sync...", prefix, current_updated)
+                    
+                    try:
+                        # Run full pipeline
+                        data_ingestion.run(force_retrain=True)
+                        preprocessing.run()
+                        fe = feature_extraction.run()
+                        training.run(fe["X"], fe["y"], fe["X_raw"], fe["y_raw"])
+                        
+                        # Hot-reload the model
+                        _load_model()
+                        last_updated = current_updated
+                        _state["last_gcs_sync"] = datetime.datetime.now().isoformat()
+                        log.info("✅ Auto-sync & re-training complete. Model hot-reloaded.")
+                    finally:
+                        _state["gcs_watcher_status"] = "Idle"
+            except Exception as e:
+                log.error("GCS Watcher error: %s", e)
+
+    watcher_task = asyncio.create_task(gcs_watcher())
+    
+    yield
+    
+    watcher_task.cancel()
+    log.info("API shutdown.")
+
+
+def hot_reload_model():
+    """Trigger a re-load of the model from disk into the running process."""
+    _load_model()
+
+
+def _load_model():
+    """Helper to (re)load the recognizer into global state."""
     if FaceRecognizer.is_available():
         _state["recognizer"] = FaceRecognizer()
-        log.info("FaceRecognizer loaded ✅")
+        log.info("FaceRecognizer (re)loaded ✅")
     else:
         log.warning("Model artefacts not found — /predict endpoints will return 503.")
-    yield
-    log.info("API shutdown.")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -154,9 +214,11 @@ class HealthResponse(BaseModel):
 
 
 class MetricsResponse(BaseModel):
-    request_count : int
-    avg_latency_s : float
-    uptime_s      : float
+    request_count      : int
+    avg_latency_s      : float
+    uptime_s           : float
+    last_gcs_sync      : Optional[str] = None
+    gcs_watcher_status : str = "Idle"
 
 
 def _encode_annotated_image(result: dict) -> Optional[str]:
@@ -252,15 +314,42 @@ async def metrics(
     request      : Request,
     current_user : User = Depends(require_role(["super_admin"])),  # super_admin only
 ):
-    """Return basic request-count and average-latency metrics."""
-    count  = _state["request_count"]
-    total  = _state["total_latency"]
-    uptime = time.time() - (_state["startup_time"] or time.time())
     return MetricsResponse(
-        request_count = count,
-        avg_latency_s = round(total / count, 3) if count else 0.0,
-        uptime_s      = round(uptime, 1),
+        request_count      = _state["request_count"],
+        avg_latency_s      = round(_state["total_latency"] / _state["request_count"], 3) if _state["request_count"] > 0 else 0.0,
+        uptime_s           = round(time.time() - (_state["startup_time"] or time.time()), 1),
+        last_gcs_sync      = _state["last_gcs_sync"],
+        gcs_watcher_status = _state["gcs_watcher_status"],
     )
+
+
+@app.post("/system/sync", tags=["System"])
+async def trigger_sync(
+    current_user : User = Depends(require_role(["super_admin"])),
+    background_tasks: BackgroundTasks = None
+):
+    """Manually trigger a GCS sync in the background."""
+    if _state["gcs_watcher_status"] == "Syncing":
+        return {"message": "Sync already in progress."}
+
+    def run_sync_task():
+        from storage.gcs_storage import GCSStorage
+        from pipelines import data_ingestion, preprocessing, feature_extraction, training
+        try:
+            _state["gcs_watcher_status"] = "Syncing"
+            # Ensure fresh download
+            data_ingestion.run(force_retrain=True)
+            preprocessing.run()
+            fe = feature_extraction.run()
+            training.run(fe["X"], fe["y"], fe["X_raw"], fe["y_raw"])
+            _load_model()
+            _state["last_gcs_sync"] = datetime.datetime.now().isoformat()
+            log.info("✅ Manual sync complete.")
+        finally:
+            _state["gcs_watcher_status"] = "Idle"
+
+    background_tasks.add_task(run_sync_task)
+    return {"message": "Sync triggered successfully."}
 
 
 @app.post(

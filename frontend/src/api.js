@@ -248,6 +248,12 @@ export async function fetchMetrics() {
   return res.json()
 }
 
+export async function triggerSync() {
+  const res = await apiFetch('/system/sync', { method: 'POST' })
+  if (!res.ok) throw new Error('Failed to trigger sync.')
+  return res.json()
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Prediction endpoints
 // ─────────────────────────────────────────────────────────────────────────────

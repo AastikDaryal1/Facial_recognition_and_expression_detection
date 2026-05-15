@@ -233,6 +233,12 @@ export default function SuperAdminDashboard() {
               <StatCard icon={Building2} label="Organisations" value={orgs.length} color="#8b5cf6" />
               <StatCard icon={Users} label="Total Users" value={users.length} color="#06b6d4" />
               <StatCard icon={ClipboardList} label="Audit Entries" value={logs.length} color="#f43f5e" />
+              <StatCard 
+                icon={RefreshCw} 
+                label="Cloud Dataset Sync" 
+                value={metrics?.gcs_watcher_status === 'Syncing' ? 'Syncing...' : (metrics?.last_gcs_sync ? new Date(metrics.last_gcs_sync).toLocaleTimeString() : 'Idle')} 
+                color={metrics?.gcs_watcher_status === 'Syncing' ? '#fbbf24' : '#10b981'} 
+              />
             </div>
 
             {/* Quick actions */}
@@ -259,6 +265,29 @@ export default function SuperAdminDashboard() {
                   color: '#34d399', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600,
                 }}>
                   <LayoutDashboard size={16} /> Go to Detection
+                </button>
+                <button 
+                  onClick={async () => {
+                    if (metrics?.gcs_watcher_status === 'Syncing') return
+                    setLoading(true)
+                    try {
+                      await triggerSync()
+                      alert('Manual sync triggered successfully! Check the dashboard in a few minutes.')
+                      load()
+                    } catch (e) { alert(e.message) }
+                    setLoading(false)
+                  }} 
+                  disabled={metrics?.gcs_watcher_status === 'Syncing'}
+                  style={{
+                    background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)',
+                    borderRadius: '8px', padding: '0.7rem 1.2rem',
+                    color: '#fbbf24', cursor: metrics?.gcs_watcher_status === 'Syncing' ? 'not-allowed' : 'pointer', 
+                    display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600,
+                    opacity: metrics?.gcs_watcher_status === 'Syncing' ? 0.6 : 1
+                  }}
+                >
+                  <RefreshCw size={16} className={metrics?.gcs_watcher_status === 'Syncing' ? 'spinning' : ''} />
+                  {metrics?.gcs_watcher_status === 'Syncing' ? 'Syncing...' : 'Sync Cloud Now'}
                 </button>
               </div>
             </div>
@@ -344,88 +373,88 @@ export default function SuperAdminDashboard() {
         {tab === 'Users' && (() => {
           const orgMap = Object.fromEntries(orgs.map(o => [o.id, o.name]))
           return (
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h3 style={{ margin: 0 }}>All Users ({users.length})</h3>
-              <button onClick={() => setShowInvite(true)} style={{
-                background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                border: 'none', borderRadius: '8px', padding: '0.6rem 1rem',
-                color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.875rem', fontWeight: 600,
-              }}>
-                <Send size={14} /> Invite User
-              </button>
-            </div>
-            <div style={{ display: 'grid', gap: '0.75rem' }}>
-              {users.map(u => (
-                <div key={u.id} style={{
-                  background: u.role === 'super_admin' ? 'rgba(245,158,11,0.04)' : 'rgba(15,23,42,0.6)',
-                  border: u.role === 'super_admin' ? '1px solid rgba(245,158,11,0.2)' : '1px solid rgba(71,85,105,0.3)',
-                  borderRadius: '10px', padding: '1rem 1.25rem',
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem',
-                  opacity: u.is_active ? 1 : 0.6,
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                <h3 style={{ margin: 0 }}>All Users ({users.length})</h3>
+                <button onClick={() => setShowInvite(true)} style={{
+                  background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                  border: 'none', borderRadius: '8px', padding: '0.6rem 1rem',
+                  color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.875rem', fontWeight: 600,
                 }}>
-                  <div style={{ flex: 1 }}>
-                    <p style={{ margin: 0, fontWeight: 600, fontSize: '0.95rem' }}>{u.email}</p>
-                    <p style={{ margin: '0.2rem 0 0', color: '#64748b', fontSize: '0.78rem' }}>ID: {u.id}</p>
-                    {u.role === 'super_admin' ? (
-                      <p style={{ margin: '0.2rem 0 0', fontSize: '0.75rem', color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        🌐 Platform-wide — not part of any organisation
-                      </p>
-                    ) : u.org_id ? (
-                      <p style={{ margin: '0.2rem 0 0', fontSize: '0.75rem', color: '#818cf8', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        🏢 {orgMap[u.org_id] || u.org_id.slice(0, 8)}
-                      </p>
-                    ) : (
-                      <p style={{ margin: '0.2rem 0 0', fontSize: '0.75rem', color: '#475569', fontStyle: 'italic' }}>
-                        ⚠ No organisation assigned
-                      </p>
+                  <Send size={14} /> Invite User
+                </button>
+              </div>
+              <div style={{ display: 'grid', gap: '0.75rem' }}>
+                {users.map(u => (
+                  <div key={u.id} style={{
+                    background: u.role === 'super_admin' ? 'rgba(245,158,11,0.04)' : 'rgba(15,23,42,0.6)',
+                    border: u.role === 'super_admin' ? '1px solid rgba(245,158,11,0.2)' : '1px solid rgba(71,85,105,0.3)',
+                    borderRadius: '10px', padding: '1rem 1.25rem',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem',
+                    opacity: u.is_active ? 1 : 0.6,
+                  }}>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ margin: 0, fontWeight: 600, fontSize: '0.95rem' }}>{u.email}</p>
+                      <p style={{ margin: '0.2rem 0 0', color: '#64748b', fontSize: '0.78rem' }}>ID: {u.id}</p>
+                      {u.role === 'super_admin' ? (
+                        <p style={{ margin: '0.2rem 0 0', fontSize: '0.75rem', color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          🌐 Platform-wide — not part of any organisation
+                        </p>
+                      ) : u.org_id ? (
+                        <p style={{ margin: '0.2rem 0 0', fontSize: '0.75rem', color: '#818cf8', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          🏢 {orgMap[u.org_id] || u.org_id.slice(0, 8)}
+                        </p>
+                      ) : (
+                        <p style={{ margin: '0.2rem 0 0', fontSize: '0.75rem', color: '#475569', fontStyle: 'italic' }}>
+                          ⚠ No organisation assigned
+                        </p>
+                      )}
+                    </div>
+                    <Badge role={u.role} />
+                    <span style={{
+                      background: u.is_active ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+                      color: u.is_active ? '#34d399' : '#f87171',
+                      border: `1px solid ${u.is_active ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`,
+                      borderRadius: '20px', padding: '0.2rem 0.7rem', fontSize: '0.75rem', fontWeight: 600,
+                    }}>
+                      {u.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                    {/* Role change */}
+                    {u.role !== 'super_admin' && u.email !== user?.email && (
+                      <select
+                        value={u.role}
+                        onChange={(e) => handleRoleChange(u.id, e.target.value, u.role)}
+                        title="Change role — requires confirmation"
+                        style={{
+                          background: 'rgba(30,41,59,0.8)', border: '1px solid rgba(71,85,105,0.5)',
+                          borderRadius: '6px', padding: '0.3rem 0.5rem', color: '#f1f5f9', fontSize: '0.8rem', cursor: 'pointer',
+                        }}
+                      >
+                        <option value="org_admin">Org Admin</option>
+                        <option value="user">User</option>
+                      </select>
+                    )}
+                    {/* Actions */}
+                    {u.email !== user?.email && (
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        {u.is_active
+                          ? <button onClick={() => handleDeactivate(u.id)} title="Deactivate" style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '6px', padding: '0.3rem 0.5rem', color: '#fbbf24', cursor: 'pointer' }}>
+                            <UserX size={14} />
+                          </button>
+                          : <button onClick={() => handleActivate(u.id)} title="Activate" style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '6px', padding: '0.3rem 0.5rem', color: '#34d399', cursor: 'pointer' }}>
+                            <UserCheck size={14} />
+                          </button>
+                        }
+                        <button onClick={() => handleDelete(u.id)} title="Delete" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '6px', padding: '0.3rem 0.5rem', color: '#f87171', cursor: 'pointer' }}>
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     )}
                   </div>
-                  <Badge role={u.role} />
-                  <span style={{
-                    background: u.is_active ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
-                    color: u.is_active ? '#34d399' : '#f87171',
-                    border: `1px solid ${u.is_active ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`,
-                    borderRadius: '20px', padding: '0.2rem 0.7rem', fontSize: '0.75rem', fontWeight: 600,
-                  }}>
-                    {u.is_active ? 'Active' : 'Inactive'}
-                  </span>
-                  {/* Role change */}
-                  {u.role !== 'super_admin' && u.email !== user?.email && (
-                    <select
-                      value={u.role}
-                      onChange={(e) => handleRoleChange(u.id, e.target.value, u.role)}
-                      title="Change role — requires confirmation"
-                      style={{
-                        background: 'rgba(30,41,59,0.8)', border: '1px solid rgba(71,85,105,0.5)',
-                        borderRadius: '6px', padding: '0.3rem 0.5rem', color: '#f1f5f9', fontSize: '0.8rem', cursor: 'pointer',
-                      }}
-                    >
-                      <option value="org_admin">Org Admin</option>
-                      <option value="user">User</option>
-                    </select>
-                  )}
-                  {/* Actions */}
-                  {u.email !== user?.email && (
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      {u.is_active
-                        ? <button onClick={() => handleDeactivate(u.id)} title="Deactivate" style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '6px', padding: '0.3rem 0.5rem', color: '#fbbf24', cursor: 'pointer' }}>
-                          <UserX size={14} />
-                        </button>
-                        : <button onClick={() => handleActivate(u.id)} title="Activate" style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '6px', padding: '0.3rem 0.5rem', color: '#34d399', cursor: 'pointer' }}>
-                          <UserCheck size={14} />
-                        </button>
-                      }
-                      <button onClick={() => handleDelete(u.id)} title="Delete" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '6px', padding: '0.3rem 0.5rem', color: '#f87171', cursor: 'pointer' }}>
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
-              {users.length === 0 && <p style={{ color: '#64748b' }}>No users yet.</p>}
+                ))}
+                {users.length === 0 && <p style={{ color: '#64748b' }}>No users yet.</p>}
+              </div>
             </div>
-          </div>
           )
         })()}
 

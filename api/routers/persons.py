@@ -309,7 +309,7 @@ async def upload_photos(
         saved_files.append(dest)
 
     # ── Upload to GCS ─────────────────────────────────────────────────────
-    gcs_folder = f"TeamFaces/{safe_name}"
+    gcs_folder = f"team_faces/{safe_name}"
     try:
         from storage.gcs_storage import GCSStorage
         gcs = GCSStorage()
@@ -370,6 +370,13 @@ async def retrain_person(
     person.is_enrolled = True
     await db.commit()
     await db.refresh(person)
+
+    # Hot-reload the model into the running API state
+    try:
+        from api.app import hot_reload_model
+        hot_reload_model()
+    except ImportError:
+        pass
 
     out = _person_out(person)
     out["retrain_result"] = result
