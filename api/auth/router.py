@@ -166,21 +166,34 @@ async def invite_user(
     if current_user.role == UserRole.org_admin and payload.role == UserRole.super_admin:
         raise HTTPException(403, "org_admin cannot invite super_admin.")
 
+    # Determine the target org:
+    # - super_admin must supply org_id in the payload (they have no org of their own)
+    # - org_admin always uses their own org (payload.org_id is ignored)
+    if current_user.role == UserRole.super_admin:
+        if not payload.org_id:
+            raise HTTPException(400, "super_admin must specify an org_id when inviting.")
+        try:
+            effective_org_id = uuid.UUID(payload.org_id)   # string → UUID object for db.get()
+        except ValueError:
+            raise HTTPException(400, "Invalid org_id format.")
+    else:
+        effective_org_id = current_user.org_id             # already a UUID object
+
     # Generate invite token
     token = _make_token(
         {
             "sub"          : str(current_user.id),
             "invite_email" : payload.email,
             "invite_role"  : payload.role.value,
-            "org_id"       : str(current_user.org_id),
+            "org_id"       : str(effective_org_id),
         },
         timedelta(hours=48),
         "invite",
     )
 
-    # Get org name for email
+    # Get org name for email (db.get() needs UUID object — guaranteed above)
     from api.models import Organisation
-    org = await db.get(Organisation, current_user.org_id)
+    org = await db.get(Organisation, effective_org_id)
     org_name = org.name if org else "VisionX"
 
     # Send email (non-blocking — don't fail if email fails)
@@ -194,10 +207,10 @@ async def invite_user(
     )
 
     await write_audit_log(
-        db=db, actor_id=current_user.id, org_id=current_user.org_id,
+        db=db, actor_id=current_user.id, org_id=effective_org_id,
         action="auth.invite",
         target_type="user", target_id=None,
-        detail={"invited_email": payload.email, "role": payload.role.value},
+        detail={"invited_email": payload.email, "role": payload.role.value, "org_id": str(effective_org_id)},
     )
     await db.commit()
 

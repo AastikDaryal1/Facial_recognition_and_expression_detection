@@ -19,6 +19,7 @@ import {
   fetchSessions, deleteSession, updateSessionNote,
   inviteUser,
   uploadPersonPhotos, retrainPerson,
+  fetchOrganisations,
 } from '../api'
 
 const TABS = ['Overview', 'Team Members', 'Enrolled Persons', 'Sessions']
@@ -66,6 +67,7 @@ export default function OrgAdminDashboard() {
   const [users, setUsers] = useState([])
   const [persons, setPersons] = useState([])
   const [sessions, setSessions] = useState([])
+  const [orgName, setOrgName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -101,10 +103,11 @@ export default function OrgAdminDashboard() {
   const load = async () => {
     setLoading(true); setError('')
     try {
-      const [uRes, pRes, sRes] = await Promise.allSettled([
-        fetchUsers(), fetchPersons(), fetchSessions()
+      const [uRes, pRes, sRes, oRes] = await Promise.allSettled([
+        fetchUsers(), fetchPersons(), fetchSessions(), fetchOrganisations()
       ])
-      if (uRes.status === 'fulfilled') setUsers(uRes.value)
+      if (uRes.status === 'fulfilled')
+        setUsers(uRes.value.filter(u => u.role !== 'super_admin'))
       else console.error('fetchUsers failed:', uRes.reason)
 
       if (pRes.status === 'fulfilled') setPersons(pRes.value)
@@ -113,7 +116,11 @@ export default function OrgAdminDashboard() {
       if (sRes.status === 'fulfilled') setSessions(sRes.value)
       else console.error('fetchSessions failed:', sRes.reason)
 
-      // Only show error banner if ALL three failed (total outage)
+      if (oRes.status === 'fulfilled' && oRes.value.length > 0)
+        setOrgName(oRes.value[0].name)
+      else console.error('fetchOrganisations failed:', oRes.reason)
+
+      // Only show error banner if ALL failed (total outage)
       const allFailed = [uRes, pRes, sRes].every(r => r.status === 'rejected')
       if (allFailed) setError('Failed to connect to the server. Is the backend running?')
 
@@ -248,7 +255,23 @@ export default function OrgAdminDashboard() {
 
         <div style={{ marginBottom: '2rem' }}>
           <h1 style={{ margin: 0, fontSize: '1.8rem', fontWeight: 700 }}>Organisation Dashboard</h1>
-          <p style={{ margin: '0.25rem 0 0', color: '#64748b' }}>Manage your team, enrolments and sessions</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.35rem', flexWrap: 'wrap' }}>
+            {orgName && (
+              <span style={{
+                background: 'rgba(99,102,241,0.12)',
+                border: '1px solid rgba(99,102,241,0.35)',
+                color: '#a5b4fc',
+                borderRadius: '20px',
+                padding: '0.2rem 0.85rem',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                display: 'flex', alignItems: 'center', gap: '5px',
+              }}>
+                🏢 {orgName}
+              </span>
+            )}
+            <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>Manage your team, enrolments and sessions</p>
+          </div>
         </div>
 
         {error && (

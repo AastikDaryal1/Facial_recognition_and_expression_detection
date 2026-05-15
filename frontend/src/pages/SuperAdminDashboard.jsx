@@ -81,6 +81,7 @@ export default function SuperAdminDashboard() {
   const [showInvite, setShowInvite] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState('org_admin')
+  const [inviteOrgId, setInviteOrgId] = useState('')
   const [inviteResult, setInviteResult] = useState('')
   const [inviting, setInviting] = useState(false)
 
@@ -104,9 +105,10 @@ export default function SuperAdminDashboard() {
 
   const handleInvite = async () => {
     if (!inviteEmail) return
+    if (!inviteOrgId) { alert('Please select an organisation.'); return }
     setInviting(true); setInviteResult('')
     try {
-      const res = await inviteUser(inviteEmail, inviteRole)
+      const res = await inviteUser(inviteEmail, inviteRole, inviteOrgId)
       setInviteResult({
         success: true,
         email: inviteEmail,
@@ -296,9 +298,40 @@ export default function SuperAdminDashboard() {
                     }}>
                       {org.is_active ? 'Active' : 'Inactive'}
                     </span>
-                    <span style={{ color: '#64748b', fontSize: '0.8rem' }}>
-                      {users.filter(u => u.org_id === org.id && u.role !== 'super_admin').length} members
-                    </span>
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{ color: '#64748b', fontSize: '0.8rem' }}>
+                        {users.filter(u => u.org_id === org.id && u.role !== 'super_admin').length} members
+                      </span>
+                      <div style={{ marginTop: '0.35rem', display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-end' }}>
+                        {users
+                          .filter(u => u.org_id === org.id && u.role !== 'super_admin')
+                          .map(u => (
+                            <span key={u.id} style={{
+                              fontSize: '0.72rem',
+                              color: u.role === 'org_admin' ? '#818cf8' : '#94a3b8',
+                              display: 'flex', alignItems: 'center', gap: '5px',
+                            }}>
+                              <span style={{
+                                width: '6px', height: '6px', borderRadius: '50%',
+                                background: u.role === 'org_admin' ? '#6366f1' : '#10b981',
+                                display: 'inline-block', flexShrink: 0,
+                              }} />
+                              {u.email}
+                              <span style={{
+                                background: u.role === 'org_admin' ? 'rgba(99,102,241,0.15)' : 'rgba(16,185,129,0.15)',
+                                color: u.role === 'org_admin' ? '#818cf8' : '#34d399',
+                                borderRadius: '10px', padding: '0 5px', fontSize: '0.65rem', fontWeight: 600,
+                              }}>
+                                {u.role === 'org_admin' ? 'Org Admin' : 'Member'}
+                              </span>
+                            </span>
+                          ))
+                        }
+                        {users.filter(u => u.org_id === org.id && u.role !== 'super_admin').length === 0 && (
+                          <span style={{ fontSize: '0.72rem', color: '#475569', fontStyle: 'italic' }}>No members yet</span>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -308,7 +341,9 @@ export default function SuperAdminDashboard() {
         )}
 
         {/* ── Users Tab ─────────────────────────────────────────────────── */}
-        {tab === 'Users' && (
+        {tab === 'Users' && (() => {
+          const orgMap = Object.fromEntries(orgs.map(o => [o.id, o.name]))
+          return (
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               <h3 style={{ margin: 0 }}>All Users ({users.length})</h3>
@@ -323,7 +358,8 @@ export default function SuperAdminDashboard() {
             <div style={{ display: 'grid', gap: '0.75rem' }}>
               {users.map(u => (
                 <div key={u.id} style={{
-                  background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(71,85,105,0.3)',
+                  background: u.role === 'super_admin' ? 'rgba(245,158,11,0.04)' : 'rgba(15,23,42,0.6)',
+                  border: u.role === 'super_admin' ? '1px solid rgba(245,158,11,0.2)' : '1px solid rgba(71,85,105,0.3)',
                   borderRadius: '10px', padding: '1rem 1.25rem',
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem',
                   opacity: u.is_active ? 1 : 0.6,
@@ -331,6 +367,19 @@ export default function SuperAdminDashboard() {
                   <div style={{ flex: 1 }}>
                     <p style={{ margin: 0, fontWeight: 600, fontSize: '0.95rem' }}>{u.email}</p>
                     <p style={{ margin: '0.2rem 0 0', color: '#64748b', fontSize: '0.78rem' }}>ID: {u.id}</p>
+                    {u.role === 'super_admin' ? (
+                      <p style={{ margin: '0.2rem 0 0', fontSize: '0.75rem', color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        🌐 Platform-wide — not part of any organisation
+                      </p>
+                    ) : u.org_id ? (
+                      <p style={{ margin: '0.2rem 0 0', fontSize: '0.75rem', color: '#818cf8', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        🏢 {orgMap[u.org_id] || u.org_id.slice(0, 8)}
+                      </p>
+                    ) : (
+                      <p style={{ margin: '0.2rem 0 0', fontSize: '0.75rem', color: '#475569', fontStyle: 'italic' }}>
+                        ⚠ No organisation assigned
+                      </p>
+                    )}
                   </div>
                   <Badge role={u.role} />
                   <span style={{
@@ -377,7 +426,8 @@ export default function SuperAdminDashboard() {
               {users.length === 0 && <p style={{ color: '#64748b' }}>No users yet.</p>}
             </div>
           </div>
-        )}
+          )
+        })()}
 
         {/* ── Sessions Tab ─────────────────────────────────────────────── */}
         {tab === 'Sessions' && (() => {
@@ -580,7 +630,7 @@ export default function SuperAdminDashboard() {
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
               <h3 style={{ margin: 0 }}>Invite User</h3>
-              <button onClick={() => { setShowInvite(false); setInviteResult('') }}
+              <button onClick={() => { setShowInvite(false); setInviteResult(''); setInviteOrgId('') }}
                 style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer' }}>
                 <X size={20} />
               </button>
@@ -631,7 +681,7 @@ export default function SuperAdminDashboard() {
                   </button>
                 </div>
                 <button
-                  onClick={() => { setShowInvite(false); setInviteResult('') }}
+                  onClick={() => { setShowInvite(false); setInviteResult(''); setInviteOrgId('') }}
                   style={{
                     width: '100%', background: 'rgba(71,85,105,0.2)',
                     border: '1px solid rgba(71,85,105,0.3)',
@@ -658,6 +708,21 @@ export default function SuperAdminDashboard() {
                     <option value="org_admin">Org Admin</option>
                     <option value="user">User</option>
                   </select>
+                </div>
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.85rem', marginBottom: '0.4rem' }}>Organisation</label>
+                  <select value={inviteOrgId} onChange={e => setInviteOrgId(e.target.value)}
+                    style={{ width: '100%', background: 'rgba(30,41,59,0.8)', border: `1px solid ${inviteOrgId ? 'rgba(99,102,241,0.5)' : 'rgba(71,85,105,0.5)'}`, borderRadius: '8px', padding: '0.7rem', color: inviteOrgId ? '#f1f5f9' : '#64748b', fontSize: '0.9rem', outline: 'none', boxSizing: 'border-box' }}>
+                    <option value="">— Select Organisation —</option>
+                    {orgs.filter(o => o.is_active).map(o => (
+                      <option key={o.id} value={o.id}>{o.name}</option>
+                    ))}
+                  </select>
+                  {!inviteOrgId && (
+                    <p style={{ margin: '0.3rem 0 0', fontSize: '0.75rem', color: '#f59e0b' }}>
+                      ⚠ You must select an organisation
+                    </p>
+                  )}
                 </div>
                 {inviteResult?.success === false && (
                   <div style={{

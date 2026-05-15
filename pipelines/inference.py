@@ -62,14 +62,15 @@ PAD           = 10
 MIN_FACE_SIZE = 20
 
 
-def _detect_faces(img_bgr: np.ndarray, img_path: str) -> list:
+def _detect_faces(img_bgr: np.ndarray, backends: list[str]) -> list:
     """Try detector backends in priority order; return first non-empty result."""
-    for backend in FACE_DETECTOR_BACKENDS:
+    for backend in backends:
         try:
+            # Pass numpy array directly for speed and reliability
             faces = DeepFace.extract_faces(
-                img_path=img_path,
+                img_path=img_bgr,
                 detector_backend=backend,
-                enforce_detection=True,  # Critical: Enforce valid face
+                enforce_detection=True,
                 align=True,
             )
             if faces:
@@ -157,8 +158,10 @@ def _annotate_image(
 def run(
     image_path     : str | Path,
     output_dir     : str | Path = Path("data/output"),
-    recognizer     : Optional[FaceRecognizer] = None,
-    save_annotated : bool = True,
+    recognizer        : Optional[FaceRecognizer] = None,
+    save_annotated    : bool = True,
+    generate_crops    : bool = True,
+    detector_backends : Optional[list[str]] = None,
 ) -> dict:
     """
     Execute the inference pipeline on a single image.
@@ -203,14 +206,8 @@ def run(
         recognizer = FaceRecognizer()
 
     # ── Step 3: Detect faces ──────────────────────────────────────────────
-    log.info("Step 1: Detecting faces …")
-    with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
-        tmp_img_path = tmp.name
-    cv2.imwrite(tmp_img_path, img_bgr)
-    try:
-        face_objs = _detect_faces(img_bgr, tmp_img_path)
-    finally:
-        Path(tmp_img_path).unlink(missing_ok=True)
+    backends = detector_backends or FACE_DETECTOR_BACKENDS
+    face_objs = _detect_faces(img_bgr, backends)
 
     log.info("  %d face(s) detected.", len(face_objs))
 
@@ -259,12 +256,13 @@ def run(
             log.warning("Emotion error: %s", e)
 
         face_image_b64 = None
-        try:
-            face_resized = cv2.resize(face_crop, (100, 100))
-            _, buffer = cv2.imencode(".jpg", face_resized, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
-            face_image_b64 = "data:image/jpeg;base64," + base64.b64encode(buffer).decode("utf-8")
-        except Exception as e:
-            log.warning("Failed to encode face crop: %s", e)
+        if generate_crops:
+            try:
+                face_resized = cv2.resize(face_crop, (100, 100))
+                _, buffer = cv2.imencode(".jpg", face_resized, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+                face_image_b64 = "data:image/jpeg;base64," + base64.b64encode(buffer).decode("utf-8")
+            except Exception as e:
+                log.warning("Failed to encode face crop: %s", e)
 
         r = {
             "face_idx"   : i,

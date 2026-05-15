@@ -53,17 +53,20 @@ function Legend() {
 }
 
 export default function LivePage() {
-  const videoRef        = useRef(null)
-  const canvasRef       = useRef(null)
-  const intervalRef     = useRef(null)
-  const [active,        setActive]        = useState(false)
-  const [faces,         setFaces]         = useState([])
-  const [error,         setError]         = useState('')
-  const [processing,    setProcessing]    = useState(false)
-  const [frameCount,    setFrameCount]    = useState(0)
+  const videoRef    = useRef(null)
+  const canvasRef   = useRef(null)
+  const activeRef   = useRef(false)   // controls loop without causing re-renders
+  const timeoutRef  = useRef(null)
+
+  const [active,      setActive]      = useState(false)
+  const [faces,       setFaces]       = useState([])
+  const [error,       setError]       = useState('')
+  const [processing,  setProcessing]  = useState(false)
+  const [frameCount,  setFrameCount]  = useState(0)
 
   const stopCamera = useCallback(() => {
-    clearInterval(intervalRef.current)
+    activeRef.current = false
+    if (timeoutRef.current) clearTimeout(timeoutRef.current)
     if (videoRef.current?.srcObject) {
       videoRef.current.srcObject.getTracks().forEach(t => t.stop())
       videoRef.current.srcObject = null
@@ -75,33 +78,51 @@ export default function LivePage() {
 
   useEffect(() => () => stopCamera(), [stopCamera])
 
+  // Recursive setTimeout: next frame fires ONLY after current one finishes.
+  // Also waits for videoWidth > 0 so the first frame isn't captured before
+  // the stream is decoded (the silent failure causing "0 faces detected").
+  const processFrame = useCallback(async () => {
+    if (!activeRef.current) return
+    const video  = videoRef.current
+    const canvas = canvasRef.current
+    if (!video || !canvas) return
+
+    if (video.videoWidth === 0) {
+      timeoutRef.current = setTimeout(processFrame, 500)
+      return
+    }
+
+    canvas.width  = video.videoWidth
+    canvas.height = video.videoHeight
+    canvas.getContext('2d').drawImage(video, 0, 0)
+    const b64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1]
+
+    setProcessing(true)
+    try {
+      const data = await predictBase64(b64, 'live.jpg')
+      if (activeRef.current) {
+        setFaces(data.results || [])
+        setFrameCount(c => c + 1)
+      }
+    } catch {
+      // Silently skip failed frames — live feed shouldn't crash
+    }
+    if (activeRef.current) {
+      setProcessing(false)
+      timeoutRef.current = setTimeout(processFrame, 400)
+    }
+  }, [])
+
   const startCamera = async () => {
     setError('')
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } })
       videoRef.current.srcObject = stream
       await videoRef.current.play()
+      activeRef.current = true
       setActive(true)
-
-      intervalRef.current = setInterval(async () => {
-        if (!videoRef.current || !canvasRef.current) return
-        const canvas = canvasRef.current
-        canvas.width  = videoRef.current.videoWidth
-        canvas.height = videoRef.current.videoHeight
-        canvas.getContext('2d').drawImage(videoRef.current, 0, 0)
-        const b64 = canvas.toDataURL('image/jpeg', 0.7).split(',')[1]
-
-        setProcessing(true)
-        try {
-          const data = await predictBase64(b64, 'live.jpg')
-          setFaces(data.results || [])
-          setFrameCount(c => c + 1)
-        } catch {
-          // Silently skip failed frames
-        }
-        setProcessing(false)
-      }, 1500)
-
+      // Short delay before first frame so stream has time to initialise
+      timeoutRef.current = setTimeout(processFrame, 300)
     } catch {
       setError('Could not access camera. Please check permissions.')
     }
@@ -208,7 +229,7 @@ export default function LivePage() {
                       {isUnknown ? 'Unknown Person' : face.name}
                     </p>
                     <p style={{ margin: '0.25rem 0 0', color, fontSize: '0.8rem' }}>
-                      {face.emotion} ({Math.round((face.emotion_conf || 0) * 100)}%)
+                      {face.emotion}
                     </p>
                   </div>
                 )

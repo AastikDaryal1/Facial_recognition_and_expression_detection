@@ -190,7 +190,13 @@ def _require_model() -> FaceRecognizer:
     return _state["recognizer"]
 
 
-def _run_inference(image_bytes: bytes, filename: str, save_annotated: bool = True) -> dict:
+def _run_inference(
+    image_bytes: bytes,
+    filename: str,
+    save_annotated: bool = True,
+    generate_crops: bool = True,
+    detector_backends: Optional[list[str]] = None,
+) -> dict:
     """Write bytes to a temp file, run inference, return result dict."""
     suffix = Path(filename).suffix or ".jpg"
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
@@ -198,10 +204,12 @@ def _run_inference(image_bytes: bytes, filename: str, save_annotated: bool = Tru
         tmp_path = tmp.name
     try:
         return inference_run(
-            image_path     = tmp_path,
-            output_dir     = "data/output/api",
-            recognizer     = _state["recognizer"],
-            save_annotated = save_annotated,
+            image_path        = tmp_path,
+            output_dir        = "data/output/api",
+            recognizer        = _state["recognizer"],
+            save_annotated    = save_annotated,
+            generate_crops    = generate_crops,
+            detector_backends = detector_backends,
         )
     finally:
         Path(tmp_path).unlink(missing_ok=True)
@@ -211,7 +219,7 @@ def _run_inference(image_bytes: bytes, filename: str, save_annotated: bool = Tru
 # Endpoints
 # ─────────────────────────────────────────────────────────────────────────────
 
-@app.get("/health", response_model=HealthResponse, tags=["System"])
+@app.api_route("/health", methods=["GET", "HEAD"], response_model=HealthResponse, tags=["System"])
 async def health():
     """Liveness probe — always responds 200 while the process is alive. No auth required."""
     uptime = time.time() - (_state["startup_time"] or time.time())
@@ -289,7 +297,12 @@ async def predict_image(
 
     log.info("Processing upload: %s (%d bytes, type: %s)", file.filename, len(image_bytes), file.content_type)
     try:
-        result = _run_inference(image_bytes, file.filename or "upload.jpg")
+        # Upload page: prioritize accuracy for group photos
+        result = _run_inference(
+            image_bytes,
+            file.filename,
+            detector_backends=["retinaface", "mtcnn", "opencv"]
+        )
     except Exception as exc:
         log.error("Inference failed: %s", exc, exc_info=True)
         raise HTTPException(500, f"Inference error: {exc}")
@@ -356,7 +369,14 @@ async def predict_base64(
         raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, f"File size exceeds {MAX_UPLOAD_SIZE_MB}MB limit.")
 
     try:
-        result = _run_inference(image_bytes, payload.filename, save_annotated=False)
+        # Live mode: prioritize speed
+        result = _run_inference(
+            image_bytes,
+            payload.filename,
+            save_annotated=False,
+            generate_crops=False,
+            detector_backends=["opencv"]
+        )
     except Exception as exc:
         log.error("Inference failed: %s", exc, exc_info=True)
         raise HTTPException(500, f"Inference error: {exc}")

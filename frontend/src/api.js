@@ -317,10 +317,10 @@ export async function deleteUser(userId) {
 // Invite endpoints
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function inviteUser(email, role) {
+export async function inviteUser(email, role, orgId) {
   const res = await apiFetch('/auth/invite', {
     method: 'POST',
-    body: JSON.stringify({ email, role }),
+    body: JSON.stringify({ email, role, org_id: orgId || null }),
   })
   const data = await res.json()
   if (!res.ok) throw new Error(data.detail || 'Invite failed.')

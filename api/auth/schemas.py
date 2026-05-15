@@ -26,8 +26,9 @@ class InviteSignupRequest(BaseModel):
 
 
 class InviteRequest(BaseModel):
-    email : EmailStr
-    role  : UserRole        # org_admin or user only (super_admin invites via CLI)
+    email  : EmailStr
+    role   : UserRole        # org_admin or user only (super_admin invites via CLI)
+    org_id : str | None = None  # required when super_admin invites; ignored for org_admin
 
 
 class TokenResponse(BaseModel):
