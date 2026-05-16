@@ -67,46 +67,44 @@ class FaceRecognizer:
         self.mean_matrix  = np.array(
             [mean_embs[m] for m in self.members], dtype=np.float32
         )
-        log.info("FaceRecognizer ready — members: %s", self.members)
+        log.info("FaceRecognizer ready — identities: %d, members: %s", len(self.members), self.members)
+        log.info("  Config metadata: threshold=%.2f, cosine=%.2f, trained_on=%d samples",
+                 self.svm_threshold, self.cosine_threshold, self.config.get("n_embeddings", 0))
 
     # ── Public API ────────────────────────────────────────────────────────
 
     def predict(self, embedding: np.ndarray) -> dict:
         """
         Identify a face from its L2-normalised FaceNet embedding.
-
-        Parameters
-        ----------
-        embedding : np.ndarray  shape (512,) or (1, 512)
-
-        Returns
-        -------
-        dict with keys:
-            name        – str    : member name or "UNKNOWN"
-            confidence  – float  : SVM probability * 100
-            svm_prob    – float  : raw SVM probability [0,1]
-            cosine_sim  – float  : cosine similarity [0,1]
-            candidate   – str    : best SVM candidate (even if rejected)
         """
         emb = normalize(embedding.reshape(1, -1))[0]
 
+        # 1. SVM Gate
         prob     = self.model.predict_proba([emb])[0]
         best_idx = int(np.argmax(prob))
         svm_prob = float(prob[best_idx])
         candidate = self.members[best_idx]
 
+        # 2. Cosine Gate
         cos_sims = cosine_similarity([emb], self.mean_matrix)[0]
         best_cos = float(cos_sims[best_idx])
 
+        # Diagnostic log
         log.debug(
-            "Identity — candidate=%s  svm=%.3f  cos=%.3f",
-            candidate, svm_prob, best_cos,
+            "Recognition candidate: %s [SVM: %.3f, Cosine: %.3f]",
+            candidate, svm_prob, best_cos
         )
 
+        # Apply dual-gate validation
         if svm_prob >= self.svm_threshold and best_cos >= self.cosine_threshold:
-            name = candidate
+            # Ensure candidate is actually in current authorized members list
+            if candidate in self.members:
+                name = candidate
+            else:
+                log.warning("Rejected identity candidate '%s' (not in authorized members list)", candidate)
+                name = "Unknown Subject"
         else:
-            name = "UNKNOWN"
+            name = "Unknown Subject"
 
         return {
             "name"      : name,

@@ -2,15 +2,15 @@
   "members": [
     "Aastik",
     "Harshita",
-    "Kashish",
-    "Lakshay",
     "Ojas",
     "Shivani",
     "Shubh"
   ],
-  "threshold": 0.7,
-  "cosine_threshold": 0.5,
-  "n_embeddings": 433,
+  "threshold": 0.8,
+  "cosine_threshold": 0.55,
+  "n_embeddings": 341,
+  "cv_accuracy": 0.998531571218796,
+  "test_accuracy": 1.0,
   "emotion_box_colors": {
     "angry": [
       244,

@@ -173,7 +173,7 @@ function Legend() {
 }
 
 function FaceAvatar({ face, color }) {
-  const isUnknown = !face.name || face.name.toUpperCase() === 'UNKNOWN'
+  const isUnknown = !face.name || face.name.toUpperCase() === 'UNKNOWN' || face.name.toLowerCase() === 'unknown subject'
 
   const getImage = (person) => {
     return person.face_image || "/dataset/unknown.png";
@@ -890,7 +890,7 @@ function UploadPage() {
                         {(isSimulating && simulatedProgress < 70) ? (
                           <>Analyzing...</>
                         ) : isUnknown ? (
-                          <><HelpCircle size={12} className="inline-icon" /> UNKNOWN - {face.emotion}</>
+                          <><HelpCircle size={12} className="inline-icon" /> Unknown Subject - {face.emotion}</>
                         ) : (
                           <><User size={12} className="inline-icon" /> {face.name} - {face.emotion}</>
                         )}
@@ -984,8 +984,9 @@ function UploadPage() {
                 <span className="badge">Unknown: {result.n_faces - result.n_identified}</span>
               </div>
               {(() => {
-                const known = result.results.filter(p => p.name !== "UNKNOWN" && p.name.toLowerCase() !== "unknown");
-                const unknown = result.results.filter(p => p.name === "UNKNOWN" || p.name.toLowerCase() === "unknown");
+                const isKnownName = (n) => n && n.toUpperCase() !== "UNKNOWN" && n.toLowerCase() !== "unknown subject";
+                const known = result.results.filter(p => isKnownName(p.name));
+                const unknown = result.results.filter(p => !isKnownName(p.name));
                 return (
                   <>
                     {known.length > 0 && (
@@ -1460,7 +1461,7 @@ function LivePage() {
                         {(isSimulating && simulatedProgress < 70) ? (
                           <>Analyzing...</>
                         ) : isUnknown ? (
-                          <><HelpCircle size={12} className="inline-icon" /> UNKNOWN - {face.emotion}</>
+                          <><HelpCircle size={12} className="inline-icon" /> Unknown Subject - {face.emotion}</>
                         ) : (
                           <><User size={12} className="inline-icon" /> {face.name} - {face.emotion}</>
                         )}
@@ -1517,7 +1518,7 @@ function LivePage() {
                         border: `1px solid ${color}`
                       }}>
                         {isUnknown ? (
-                          <><HelpCircle size={12} className="inline-icon" /> UNKNOWN - {face.emotion}</>
+                          <><HelpCircle size={12} className="inline-icon" /> Unknown Subject - {face.emotion}</>
                         ) : (
                           <><User size={12} className="inline-icon" /> {face.name} - {face.emotion}</>
                         )}
@@ -1584,8 +1585,9 @@ function LivePage() {
                     <span className="badge">Unknown: {snapshotResult.n_faces - snapshotResult.n_identified}</span>
                   </div>
                   {(() => {
-                    const known = snapshotResult.results.filter(p => p.name !== "UNKNOWN" && p.name.toLowerCase() !== "unknown");
-                    const unknown = snapshotResult.results.filter(p => p.name === "UNKNOWN" || p.name.toLowerCase() === "unknown");
+                    const isKnownName = (n) => n && n.toUpperCase() !== "UNKNOWN" && n.toLowerCase() !== "unknown subject";
+                    const known = snapshotResult.results.filter(p => isKnownName(p.name));
+                    const unknown = snapshotResult.results.filter(p => !isKnownName(p.name));
                     return (
                       <>
                         {known.length > 0 && (
