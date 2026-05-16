@@ -50,7 +50,6 @@ from models.emotion_model import detect_with_calibration
 from models.face_model import FaceRecognizer
 from utils.image_utils import bgr_to_rgb, load_image, save_image
 from utils.logger import get_logger
-from utils.validation import validate_face_region
 
 log = get_logger(__name__)
 
