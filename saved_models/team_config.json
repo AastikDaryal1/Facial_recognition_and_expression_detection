@@ -11,6 +11,8 @@
   "threshold": 0.7,
   "cosine_threshold": 0.5,
   "n_embeddings": 433,
+  "cv_accuracy": 0.9988425925925926,
+  "test_accuracy": 1.0,
   "emotion_box_colors": {
     "angry": [
       244,

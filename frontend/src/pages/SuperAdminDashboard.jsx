@@ -233,11 +233,11 @@ export default function SuperAdminDashboard() {
               <StatCard icon={Building2} label="Organisations" value={orgs.length} color="#8b5cf6" />
               <StatCard icon={Users} label="Total Users" value={users.length} color="#06b6d4" />
               <StatCard icon={ClipboardList} label="Audit Entries" value={logs.length} color="#f43f5e" />
-              <StatCard 
-                icon={RefreshCw} 
-                label="Cloud Dataset Sync" 
-                value={metrics?.gcs_watcher_status === 'Syncing' ? 'Syncing...' : (metrics?.last_gcs_sync ? new Date(metrics.last_gcs_sync).toLocaleTimeString() : 'Idle')} 
-                color={metrics?.gcs_watcher_status === 'Syncing' ? '#fbbf24' : '#10b981'} 
+              <StatCard
+                icon={RefreshCw}
+                label="Cloud Dataset Sync"
+                value={metrics?.gcs_watcher_status === 'Syncing' ? 'Syncing...' : (metrics?.last_gcs_sync ? new Date(metrics.last_gcs_sync).toLocaleTimeString() : 'Idle')}
+                color={metrics?.gcs_watcher_status === 'Syncing' ? '#fbbf24' : '#10b981'}
               />
             </div>
 
@@ -266,7 +266,7 @@ export default function SuperAdminDashboard() {
                 }}>
                   <LayoutDashboard size={16} /> Go to Detection
                 </button>
-                <button 
+                <button
                   onClick={async () => {
                     if (metrics?.gcs_watcher_status === 'Syncing') return
                     setLoading(true)
@@ -276,12 +276,12 @@ export default function SuperAdminDashboard() {
                       load()
                     } catch (e) { alert(e.message) }
                     setLoading(false)
-                  }} 
+                  }}
                   disabled={metrics?.gcs_watcher_status === 'Syncing'}
                   style={{
                     background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)',
                     borderRadius: '8px', padding: '0.7rem 1.2rem',
-                    color: '#fbbf24', cursor: metrics?.gcs_watcher_status === 'Syncing' ? 'not-allowed' : 'pointer', 
+                    color: '#fbbf24', cursor: metrics?.gcs_watcher_status === 'Syncing' ? 'not-allowed' : 'pointer',
                     display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600,
                     opacity: metrics?.gcs_watcher_status === 'Syncing' ? 0.6 : 1
                   }}
@@ -680,7 +680,7 @@ export default function SuperAdminDashboard() {
                   <p style={{ color: '#64748b', fontSize: '0.78rem', margin: '0 0 0.75rem' }}>
                     Copy this token and share it with the user. They should go to:<br />
                     <span style={{ color: '#a5b4fc' }}>
-                      {window.location.origin}/signup?token=...
+                      {import.meta.env.VITE_FRONTEND_URL || window.location.origin}/signup?token=...
                     </span>
                   </p>
                   <div style={{
@@ -695,7 +695,7 @@ export default function SuperAdminDashboard() {
                   <button
                     onClick={() => {
                       navigator.clipboard.writeText(
-                        `${window.location.origin}/signup?token=${inviteResult.token}`
+                        `${import.meta.env.VITE_FRONTEND_URL || window.location.origin}/signup?token=${inviteResult.token}`
                       )
                       alert('Signup link copied to clipboard!')
                     }}
