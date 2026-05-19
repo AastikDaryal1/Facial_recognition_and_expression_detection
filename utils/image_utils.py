@@ -62,10 +62,6 @@ def load_image(path: str | Path, max_width: int = 0) -> Optional[np.ndarray]:
         log.warning("Could not load image %s: %s", path, e)
         return None
 
-    if img is None:
-        log.warning("Could not load image: %s", path)
-        return None
-
     if max_width and img.shape[1] > max_width:
         img = resize_to_width(img, max_width)
 

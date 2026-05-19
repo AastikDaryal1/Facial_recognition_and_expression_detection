@@ -1,44 +1,45 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# Dockerfile — Face & Emotion Detection API
-# Build:   docker build -t face-emotion-api .
-# Run:     docker run -p 8000:8000 --env-file .env face-emotion-api
+# Stage 1: Build the React Application
 # ─────────────────────────────────────────────────────────────────────────────
-
-FROM python:3.11-slim
-
-# System dependencies for OpenCV
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        libgl1 \
-        libglib2.0-0 \
-        libsm6 \
-        libxext6 \
-        libxrender1 \
-        libgomp1 \
-    && rm -rf /var/lib/apt/lists/*
+FROM node:20-slim AS build-stage
 
 WORKDIR /app
 
-# Install Python dependencies first (layer-cached)
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install dependencies
+COPY package*.json ./
+RUN npm install
 
-# Copy application code
+# Copy source code
 COPY . .
 
-# Create runtime directories
-RUN mkdir -p logs data/output saved_models secrets
+# Build the application
+# We can pass VITE_API_BASE_URL as an environment variable during build
+ARG VITE_API_BASE_URL=http://localhost:8000
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 
-# Non-root user for security
-RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
-USER appuser
+ARG VITE_FRONTEND_URL=http://localhost:3000
+ENV VITE_FRONTEND_URL=$VITE_FRONTEND_URL
 
-EXPOSE 8000
+RUN npm run build
 
-# Liveness probe
-HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+# ─────────────────────────────────────────────────────────────────────────────
+# Stage 2: Serve with Nginx
+# ─────────────────────────────────────────────────────────────────────────────
+FROM nginx:stable-alpine
 
-CMD ["uvicorn", "api.app:app", \
-     "--host", "0.0.0.0", \
-     "--port", "8000", \
-     "--workers", "2"]
+# Copy built files from build-stage
+COPY --from=build-stage /app/dist /usr/share/nginx/html
+
+# Custom nginx config to handle SPA routing if needed
+RUN echo 'server { \
+    listen 80; \
+    location / { \
+        root /usr/share/nginx/html; \
+        index index.html index.htm; \
+        try_files $uri $uri/ /index.html; \
+    } \
+}' > /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

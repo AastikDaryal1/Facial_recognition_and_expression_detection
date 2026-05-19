@@ -50,6 +50,7 @@ from models.emotion_model import detect_with_calibration
 from models.face_model import FaceRecognizer
 from utils.image_utils import bgr_to_rgb, load_image, save_image
 from utils.logger import get_logger
+from utils.validation import validate_face_region
 
 log = get_logger(__name__)
 
@@ -61,12 +62,13 @@ PAD           = 10
 MIN_FACE_SIZE = 20
 
 
-def _detect_faces(img_bgr: np.ndarray, img_path: str) -> list:
+def _detect_faces(img_bgr: np.ndarray, backends: list[str]) -> list:
     """Try detector backends in priority order; return first non-empty result."""
-    for backend in FACE_DETECTOR_BACKENDS:
+    for backend in backends:
         try:
+            # Pass numpy array directly for speed and reliability
             faces = DeepFace.extract_faces(
-                img_path=img_path,
+                img_path=img_bgr,
                 detector_backend=backend,
                 enforce_detection=False,  # Allow best-effort
                 align=True,
@@ -92,7 +94,6 @@ def _get_embedding(face_bgr: np.ndarray) -> Optional[np.ndarray]:
     except Exception as exc:
         log.debug("Embedding error: %s", exc)
         return None
-
 
 
 def _annotate_image(
@@ -154,11 +155,12 @@ def _annotate_image(
 
 
 def run(
-    image_path     : str | Path,
-    output_dir     : str | Path = Path("data/output"),
-    recognizer     : Optional[FaceRecognizer] = None,
-    save_annotated : bool = True,
-    generate_crops : bool = True,
+    image_path        : str | Path,
+    output_dir        : str | Path = Path("data/output"),
+    recognizer        : Optional[FaceRecognizer] = None,
+    save_annotated    : bool = True,
+    generate_crops    : bool = True,
+    detector_backends : Optional[list[str]] = None,
 ) -> dict:
     """
     Execute the inference pipeline on a single image.
@@ -203,14 +205,8 @@ def run(
         recognizer = FaceRecognizer()
 
     # ── Step 3: Detect faces ──────────────────────────────────────────────
-    log.info("Step 1: Detecting faces …")
-    with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
-        tmp_img_path = tmp.name
-    cv2.imwrite(tmp_img_path, img_bgr)
-    try:
-        face_objs = _detect_faces(img_bgr, tmp_img_path)
-    finally:
-        Path(tmp_img_path).unlink(missing_ok=True)
+    backends = detector_backends or FACE_DETECTOR_BACKENDS
+    face_objs = _detect_faces(img_bgr, backends)
 
     log.info("  %d face(s) detected.", len(face_objs))
 
@@ -221,12 +217,14 @@ def run(
     for i, face_obj in enumerate(face_objs):
         region = face_obj.get("facial_area", face_obj.get("region", {}))
         
-        x, y   = region.get("x", 0), region.get("y", 0)
-        w, h   = region.get("w", 0), region.get("h", 0)
-
-        if w < MIN_FACE_SIZE or h < MIN_FACE_SIZE:
-            log.debug("  Face %d too small (%d×%d) — skipped", i + 1, w, h)
+        # ── Quality Gatekeeper ─────────────────────────────────────────────
+        conf = face_obj.get("confidence", 1.0)
+        is_valid, reason = validate_face_region(region, img_bgr, (h_orig, w_orig), conf, i)
+        if not is_valid:
+            log.warning("  [REJECTED] Face %d: %s", i + 1, reason)
             continue
+            
+        x, y, w, h = region["x"], region["y"], region["w"], region["h"]
 
         x1 = max(0, x - PAD);  y1 = max(0, y - PAD)
         x2 = min(w_orig, x + w + PAD);  y2 = min(h_orig, y + h + PAD)

@@ -5,11 +5,20 @@ FastAPI REST server — production deployment interface.
 
 Endpoints
 ---------
-GET  /health                  → liveness check
-GET  /model/info              → loaded model metadata
-POST /predict/image           → analyse an uploaded image file
-POST /predict/base64          → analyse a base64-encoded image
-GET  /metrics                 → basic request/latency metrics
+GET  /health                  → liveness check (public)
+GET  /model/info              → loaded model metadata (any logged-in user)
+POST /predict/image           → analyse an uploaded image file (any logged-in user)
+POST /predict/base64          → analyse a base64-encoded image (any logged-in user)
+GET  /metrics                 → basic request/latency metrics (super_admin only)
+
+Auth
+----
+POST /auth/signup             → create first super_admin account (one-time)
+POST /auth/login              → returns access + refresh tokens
+POST /auth/refresh            → rotate access token
+POST /auth/logout             → blacklists current token
+POST /auth/invite             → org_admin / super_admin issues an invite token
+POST /auth/signup-invite      → register using an invite token
 
 Usage
 -----
@@ -19,28 +28,30 @@ Usage
 
 
 import base64
-import io
 import time
+import datetime
 import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
-import cv2
-import numpy as np
-from fastapi import FastAPI, File, HTTPException, UploadFile, status, Security, Depends, Request
+from fastapi import FastAPI, File, HTTPException, UploadFile, status, Depends, Request, BackgroundTasks
+from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-from config.settings import API_HOST, API_PORT, API_WORKERS, API_KEY, MAX_UPLOAD_SIZE_MB, RATE_LIMIT
+from config.settings import API_HOST, API_PORT, API_WORKERS, MAX_UPLOAD_SIZE_MB, RATE_LIMIT
 from models.face_model import FaceRecognizer
 from pipelines.inference import run as inference_run
 from utils.logger import get_logger
+from api.auth.router import router as auth_router
+from api.dependencies import get_current_user, require_role
+from api.models import User, Session, Organisation, Person, AuditLog  # noqa: F401 — all must be imported so Base.metadata.create_all creates their tables
+from db.base import engine, Base, get_db
 
 log = get_logger(__name__)
 
@@ -50,39 +61,95 @@ log = get_logger(__name__)
 _state: dict = {
     "recognizer"    : None,
     "request_count" : 0,
-    "total_latency" : 0.0,
-    "startup_time"  : None,
+    "total_latency": 0.0,
+    "startup_time": None,
+    "last_gcs_sync": None,
+    "gcs_watcher_status": "Idle", # Idle or Syncing
 }
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load model artefacts once on startup; release on shutdown."""
+    """Create DB tables, load model artefacts once on startup; start GCS watcher."""
+
+    # ── Database ──────────────────────────────────────────────────────────────
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    log.info("Database tables verified ✅")
+
+    # ── Model ─────────────────────────────────────────────────────────────────
     log.info("API startup — loading model artefacts …")
     _state["startup_time"] = time.time()
+    _load_model()
+
+    # ── GCS Watcher ───────────────────────────────────────────────────────────
+    import asyncio
+    from config.settings import GCS_TEAM_ZIP
+    from storage.gcs_storage import GCSStorage
+    from pipelines import data_ingestion, preprocessing, feature_extraction, training
+
+    async def gcs_watcher():
+        """Background loop to check for dataset updates on GCS."""
+        await asyncio.sleep(10) # wait for startup to settle
+        gcs = GCSStorage()
+        
+        # Monitor the folder 'team_faces/'
+        prefix = "team_faces/"
+        last_updated = gcs.get_latest_blob_updated(prefix)
+        log.info("GCS Watcher started. Monitoring folder: %s (initial: %s)", prefix, last_updated)
+
+        while True:
+            try:
+                await asyncio.sleep(60) # Poll every 1 minute
+                current_updated = gcs.get_latest_blob_updated(prefix)
+                
+                if current_updated and (last_updated is None or current_updated > last_updated):
+                    _state["gcs_watcher_status"] = "Syncing"
+                    log.info("🔔 GCS CHANGE DETECTED! Dataset folder '%s' updated at %s. Starting auto-sync...", prefix, current_updated)
+                    
+                    try:
+                        # Run full pipeline
+                        data_ingestion.run(force_retrain=True)
+                        preprocessing.run()
+                        fe = feature_extraction.run()
+                        training.run(fe["X"], fe["y"], fe["X_raw"], fe["y_raw"])
+                        
+                        # Hot-reload the model
+                        _load_model()
+                        last_updated = current_updated
+                        _state["last_gcs_sync"] = datetime.datetime.now().isoformat()
+                        log.info("✅ Auto-sync & re-training complete. Model hot-reloaded.")
+                    finally:
+                        _state["gcs_watcher_status"] = "Idle"
+            except Exception as e:
+                log.error("GCS Watcher error: %s", e)
+
+    watcher_task = asyncio.create_task(gcs_watcher())
+    
+    yield
+    
+    watcher_task.cancel()
+    log.info("API shutdown.")
+
+
+def hot_reload_model():
+    """Trigger a re-load of the model from disk into the running process."""
+    _load_model()
+
+
+def _load_model():
+    """Helper to (re)load the recognizer into global state."""
     if FaceRecognizer.is_available():
         _state["recognizer"] = FaceRecognizer()
-        log.info("FaceRecognizer loaded ✅")
+        log.info("FaceRecognizer (re)loaded ✅")
     else:
         log.warning("Model artefacts not found — /predict endpoints will return 503.")
-    yield
-    log.info("API shutdown.")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # App
 # ─────────────────────────────────────────────────────────────────────────────
 limiter = Limiter(key_func=get_remote_address)
-
-_api_key_header = APIKeyHeader(name="X-API-Key")
-
-def get_api_key(api_key_header: str = Security(_api_key_header)):
-    if api_key_header != API_KEY:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid API Key",
-        )
-    return api_key_header
 
 app = FastAPI(
     title       = "Face & Emotion Detection API",
@@ -96,12 +163,24 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins  = ["*"],
+    allow_origins = ["http://localhost:5173", "http://localhost:3000", "http://192.168.19.64:3000"],
+    allow_credentials = True,
     allow_methods  = ["*"],
     allow_headers  = ["*"],
 )
 
-
+# ── Auth router ──────────────────────────────────────────────────────────────
+app.include_router(auth_router, prefix="/auth", tags=["Auth"])
+from api.routers.users import router as users_router
+app.include_router(users_router, prefix="/users", tags=["Users"])
+from api.routers.organisations import router as orgs_router
+app.include_router(orgs_router, prefix="/organisations", tags=["Organisations"])
+from api.routers.persons import router as persons_router
+app.include_router(persons_router, prefix="/persons", tags=["Persons"])
+from api.routers.sessions import router as sessions_router
+app.include_router(sessions_router, prefix="/sessions", tags=["Sessions"])
+from api.routers.audit import router as audit_router
+app.include_router(audit_router, prefix="/audit", tags=["Audit"])
 # ─────────────────────────────────────────────────────────────────────────────
 # Pydantic models
 # ─────────────────────────────────────────────────────────────────────────────
@@ -135,13 +214,34 @@ class HealthResponse(BaseModel):
 
 
 class MetricsResponse(BaseModel):
-    request_count : int
-    avg_latency_s : float
-    uptime_s      : float
+    request_count      : int
+    avg_latency_s      : float
+    uptime_s           : float
+    last_gcs_sync      : Optional[str] = None
+    gcs_watcher_status : str = "Idle"
+
+
+def _encode_annotated_image(result: dict) -> Optional[str]:
+    """
+    Return a base64-encoded JPEG of the annotated image, or None.
+    For /predict/image  → reads from the saved output file (output_path).
+    For /predict/base64 → output_path is None (save_annotated=False),
+                          so we return None here; the live feed doesn't
+                          need a persisted annotated frame.
+    """
+    output_path = result.get("output_path")
+    if not output_path:
+        return None
+    try:
+        with open(output_path, "rb") as f:
+            return base64.b64encode(f.read()).decode("utf-8")
+    except Exception as e:
+        log.warning("Could not encode output image: %s", e)
+        return None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Helper
+# Helpers
 # ─────────────────────────────────────────────────────────────────────────────
 def _require_model() -> FaceRecognizer:
     if _state["recognizer"] is None:
@@ -152,7 +252,13 @@ def _require_model() -> FaceRecognizer:
     return _state["recognizer"]
 
 
-def _run_inference(image_bytes: bytes, filename: str, save_annotated: bool = True, generate_crops: bool = True) -> dict:
+def _run_inference(
+    image_bytes: bytes,
+    filename: str,
+    save_annotated: bool = True,
+    generate_crops: bool = True,
+    detector_backends: Optional[list[str]] = None,
+) -> dict:
     """Write bytes to a temp file, run inference, return result dict."""
     suffix = Path(filename).suffix or ".jpg"
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
@@ -160,11 +266,12 @@ def _run_inference(image_bytes: bytes, filename: str, save_annotated: bool = Tru
         tmp_path = tmp.name
     try:
         return inference_run(
-            image_path    = tmp_path,
-            output_dir    = "data/output/api",
-            recognizer    = _state["recognizer"],
-            save_annotated= save_annotated,
-            generate_crops= generate_crops,
+            image_path        = tmp_path,
+            output_dir        = "data/output/api",
+            recognizer        = _state["recognizer"],
+            save_annotated    = save_annotated,
+            generate_crops    = generate_crops,
+            detector_backends = detector_backends,
         )
     finally:
         Path(tmp_path).unlink(missing_ok=True)
@@ -174,9 +281,9 @@ def _run_inference(image_bytes: bytes, filename: str, save_annotated: bool = Tru
 # Endpoints
 # ─────────────────────────────────────────────────────────────────────────────
 
-@app.get("/health", response_model=HealthResponse, tags=["System"])
+@app.api_route("/health", methods=["GET", "HEAD"], response_model=HealthResponse, tags=["System"])
 async def health():
-    """Liveness probe — always responds 200 while the process is alive."""
+    """Liveness probe — always responds 200 while the process is alive. No auth required."""
     uptime = time.time() - (_state["startup_time"] or time.time())
     return HealthResponse(
         status       = "ok",
@@ -187,7 +294,10 @@ async def health():
 
 @app.get("/model/info", tags=["System"])
 @limiter.limit(RATE_LIMIT)
-async def model_info(request: Request, api_key: str = Security(get_api_key)):
+async def model_info(
+    request      : Request,
+    current_user : User = Depends(get_current_user),   # any logged-in user
+):
     """Return metadata about the loaded model."""
     rec = _require_model()
     return {
@@ -199,17 +309,47 @@ async def model_info(request: Request, api_key: str = Security(get_api_key)):
 
 
 @app.get("/metrics", response_model=MetricsResponse, tags=["System"])
-@limiter.limit(RATE_LIMIT)
-async def metrics(request: Request, api_key: str = Security(get_api_key)):
-    """Return basic request-count and average-latency metrics."""
-    count  = _state["request_count"]
-    total  = _state["total_latency"]
-    uptime = time.time() - (_state["startup_time"] or time.time())
+@limiter.limit("120/minute")  # dashboard polls this frequently; higher limit than public endpoints
+async def metrics(
+    request      : Request,
+    current_user : User = Depends(require_role(["super_admin"])),  # super_admin only
+):
     return MetricsResponse(
-        request_count = count,
-        avg_latency_s = round(total / count, 3) if count else 0.0,
-        uptime_s      = round(uptime, 1),
+        request_count      = _state["request_count"],
+        avg_latency_s      = round(_state["total_latency"] / _state["request_count"], 3) if _state["request_count"] > 0 else 0.0,
+        uptime_s           = round(time.time() - (_state["startup_time"] or time.time()), 1),
+        last_gcs_sync      = _state["last_gcs_sync"],
+        gcs_watcher_status = _state["gcs_watcher_status"],
     )
+
+
+@app.post("/system/sync", tags=["System"])
+async def trigger_sync(
+    current_user : User = Depends(require_role(["super_admin"])),
+    background_tasks: BackgroundTasks = None
+):
+    """Manually trigger a GCS sync in the background."""
+    if _state["gcs_watcher_status"] == "Syncing":
+        return {"message": "Sync already in progress."}
+
+    def run_sync_task():
+        from storage.gcs_storage import GCSStorage
+        from pipelines import data_ingestion, preprocessing, feature_extraction, training
+        try:
+            _state["gcs_watcher_status"] = "Syncing"
+            # Ensure fresh download
+            data_ingestion.run(force_retrain=True)
+            preprocessing.run()
+            fe = feature_extraction.run()
+            training.run(fe["X"], fe["y"], fe["X_raw"], fe["y_raw"])
+            _load_model()
+            _state["last_gcs_sync"] = datetime.datetime.now().isoformat()
+            log.info("✅ Manual sync complete.")
+        finally:
+            _state["gcs_watcher_status"] = "Idle"
+
+    background_tasks.add_task(run_sync_task)
+    return {"message": "Sync triggered successfully."}
 
 
 @app.post(
@@ -220,9 +360,10 @@ async def metrics(request: Request, api_key: str = Security(get_api_key)):
 )
 @limiter.limit(RATE_LIMIT)
 async def predict_image(
-    request: Request,
-    file: UploadFile = File(...),
-    api_key: str = Security(get_api_key)
+    request      : Request,
+    file         : UploadFile = File(...),
+    current_user : User = Depends(get_current_user),   # any logged-in user
+    db           : AsyncSession = Depends(get_db),
 ):
     """
     Upload a JPEG/PNG image.
@@ -245,7 +386,12 @@ async def predict_image(
 
     log.info("Processing upload: %s (%d bytes, type: %s)", file.filename, len(image_bytes), file.content_type)
     try:
-        result = _run_inference(image_bytes, file.filename or "upload.jpg")
+        # Upload page: prioritize accuracy for group photos
+        result = _run_inference(
+            image_bytes,
+            file.filename,
+            detector_backends=["retinaface", "mtcnn", "opencv"]
+        )
     except Exception as exc:
         log.error("Inference failed: %s", exc, exc_info=True)
         raise HTTPException(500, f"Inference error: {exc}")
@@ -254,14 +400,25 @@ async def predict_image(
     _state["request_count"] += 1
     _state["total_latency"]  += elapsed
 
-    # Encode annotated image to base64 for frontend preview
-    annotated_b64 = None
-    if result.get("output_path"):
-        try:
-            with open(result["output_path"], "rb") as f:
-                annotated_b64 = base64.b64encode(f.read()).decode("utf-8")
-        except Exception as e:
-            log.warning("Could not encode output image: %s", e)
+    annotated_b64 = _encode_annotated_image(result)
+
+    # Save session to DB
+    try:
+        session_rec = Session(
+            user_id         = current_user.id,
+            org_id          = current_user.org_id,
+            n_faces         = result["n_faces"],
+            n_identified    = result["n_identified"],
+            elapsed_s       = round(elapsed, 3),
+            results_json    = {"results": result["results"]},
+            annotated_image = annotated_b64,
+        )
+        db.add(session_rec)
+        await db.commit()
+        log.info("Session recorded: %s", session_rec.id)
+    except Exception as e:
+        log.error("Failed to save session record: %s", e)
+        # We don't raise here — inference was successful, session saving is secondary
 
     return PredictResponse(
         n_faces         = result["n_faces"],
@@ -280,9 +437,10 @@ async def predict_image(
 )
 @limiter.limit(RATE_LIMIT)
 async def predict_base64(
-    request: Request,
-    payload: Base64Request,
-    api_key: str = Security(get_api_key)
+    request      : Request,
+    payload      : Base64Request,
+    current_user : User = Depends(get_current_user),   # any logged-in user
+    db           : AsyncSession = Depends(get_db),
 ):
     """
     Send a base64-encoded image string.
@@ -301,7 +459,12 @@ async def predict_base64(
 
     try:
         # Live mode: Enable crop generation for better visual feedback
-        result = _run_inference(image_bytes, payload.filename, save_annotated=False, generate_crops=True)
+        result = _run_inference(
+            image_bytes,
+            payload.filename,
+            save_annotated=False,
+            generate_crops=True
+        )
     except Exception as exc:
         log.error("Inference failed: %s", exc, exc_info=True)
         raise HTTPException(500, f"Inference error: {exc}")
@@ -310,11 +473,32 @@ async def predict_base64(
     _state["request_count"] += 1
     _state["total_latency"]  += elapsed
 
+    # save_annotated=False for live frames → output_path is None → annotated_b64 will be None
+    annotated_b64 = _encode_annotated_image(result)
+
+    # Save session to DB
+    try:
+        session_rec = Session(
+            user_id         = current_user.id,
+            org_id          = current_user.org_id,
+            n_faces         = result["n_faces"],
+            n_identified    = result["n_identified"],
+            elapsed_s       = round(elapsed, 3),
+            results_json    = {"results": result["results"]},
+            annotated_image = annotated_b64,
+        )
+        db.add(session_rec)
+        await db.commit()
+        log.info("Session recorded (base64): %s", session_rec.id)
+    except Exception as e:
+        log.error("Failed to save session record: %s", e)
+
     return PredictResponse(
-        n_faces      = result["n_faces"],
-        n_identified = result["n_identified"],
-        results      = [FaceResult(**r) for r in result["results"]],
-        elapsed_s    = round(elapsed, 3),
+        n_faces         = result["n_faces"],
+        n_identified    = result["n_identified"],
+        results         = [FaceResult(**r) for r in result["results"]],
+        elapsed_s       = round(elapsed, 3),
+        annotated_image = annotated_b64,
     )
 
 
