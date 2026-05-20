@@ -97,7 +97,8 @@ async def signup(payload: SignupRequest, db: AsyncSession = Depends(get_db)):
 
 @router.post("/login", response_model=TokenResponse)
 async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
-    user = await db.scalar(select(User).where(User.email == payload.email))
+    clean_email = payload.email.strip()
+    user = await db.scalar(select(User).where(User.email == clean_email))
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid credentials.")
     if not user.is_active:

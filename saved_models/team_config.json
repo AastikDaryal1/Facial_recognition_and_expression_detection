@@ -6,8 +6,8 @@
     "Shivani",
     "Shubh"
   ],
-  "threshold": 0.8,
-  "cosine_threshold": 0.55,
+  "threshold": 0.55,
+  "cosine_threshold": 0.4,
   "n_embeddings": 341,
   "cv_accuracy": 0.998531571218796,
   "test_accuracy": 1.0,

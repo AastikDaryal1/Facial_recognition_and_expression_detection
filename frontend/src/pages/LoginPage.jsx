@@ -322,7 +322,7 @@ function LoginForm({ onSuccess }) {
     setLoading(true)
     setError('')
     try {
-      const result = await login(email, password)
+      const result = await login(email.trim(), password)
       onSuccess(result)
     } catch (err) {
       setError(err.message || 'Login failed. Please check your credentials.')
@@ -496,11 +496,17 @@ export default function LoginPage() {
     }
   }, [user])
 
+  const [setupError, setSetupError] = useState(null)
+
   // Check if super admin exists
   useEffect(() => {
     checkSetup()
       .then(done => setSetupComplete(done))
-      .catch(() => setSetupComplete(true)) // on error assume setup done
+      .catch((err) => {
+        console.error("checkSetup error:", err)
+        setSetupError(err.message || 'Failed to connect to backend.')
+        setSetupComplete(false) // Default to setup screen so user isn't stuck on login
+      })
   }, [])
 
   const handleSuccess = (result) => {
@@ -579,7 +585,18 @@ export default function LoginPage() {
 
         {/* First-time setup */}
         {setupComplete === false && (
-          <SetupForm onSuccess={handleSuccess} />
+          <>
+            {setupError && (
+              <div style={{
+                background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+                borderRadius: '8px', padding: '0.75rem', marginBottom: '1rem',
+                color: '#fca5a5', fontSize: '0.85rem', textAlign: 'center'
+              }}>
+                Warning: {setupError}
+              </div>
+            )}
+            <SetupForm onSuccess={handleSuccess} />
+          </>
         )}
 
         {/* Normal login */}
