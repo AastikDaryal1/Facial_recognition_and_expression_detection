@@ -169,20 +169,7 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Recognition library */}
-      {members.length > 0 && (
-        <div className="home-section">
-          <div className="section-header">
-            <Users size={20} />
-            <h2>Recognition Library</h2>
-          </div>
-          <div className="members-library">
-            {members.map(name => (
-              <span key={name} className="member-chip">{name}</span>
-            ))}
-          </div>
-        </div>
-      )}
+
     </section>
   )
 }
