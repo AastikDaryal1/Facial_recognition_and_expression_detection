@@ -62,15 +62,32 @@ PAD           = 10
 MIN_FACE_SIZE = 20
 
 
-def _detect_faces(img_bgr: np.ndarray, backends: list[str]) -> list:
-    """Try detector backends in priority order; return first non-empty result."""
+def _detect_faces_live(img_bgr: np.ndarray, backends: list[str]) -> list:
+    """Live-feed path: pass numpy array directly for maximum speed."""
     for backend in backends:
         try:
-            # Pass numpy array directly for speed and reliability
             faces = DeepFace.extract_faces(
                 img_path=img_bgr,
                 detector_backend=backend,
-                enforce_detection=False,  # Allow best-effort
+                enforce_detection=False,
+                align=True,
+            )
+            if faces:
+                log.info("  Face detector: %-12s → %d face(s)", backend, len(faces))
+                return faces
+        except Exception as exc:
+            log.warning("  %s failed: %s", backend, exc)
+    return []
+
+
+def _detect_faces_upload(img_bgr: np.ndarray, img_path: str) -> list:
+    """Upload path: pass file path for maximum detection fidelity (Shubh branch logic)."""
+    for backend in FACE_DETECTOR_BACKENDS:
+        try:
+            faces = DeepFace.extract_faces(
+                img_path=img_path,
+                detector_backend=backend,
+                enforce_detection=False,
                 align=True,
             )
             if faces:
@@ -161,6 +178,7 @@ def run(
     save_annotated    : bool = True,
     generate_crops    : bool = True,
     detector_backends : Optional[list[str]] = None,
+    is_live           : bool = False,
 ) -> dict:
     """
     Execute the inference pipeline on a single image.
@@ -205,8 +223,20 @@ def run(
         recognizer = FaceRecognizer()
 
     # ── Step 3: Detect faces ──────────────────────────────────────────────
-    backends = detector_backends or FACE_DETECTOR_BACKENDS
-    face_objs = _detect_faces(img_bgr, backends)
+    if is_live:
+        # Live feed: fast numpy-array path
+        backends = detector_backends or FACE_DETECTOR_BACKENDS
+        face_objs = _detect_faces_live(img_bgr, backends)
+    else:
+        # Upload: file-path approach for maximum group-photo fidelity (Shubh branch logic)
+        log.info("Step 1: Detecting faces …")
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+            tmp_img_path = tmp.name
+        cv2.imwrite(tmp_img_path, img_bgr)
+        try:
+            face_objs = _detect_faces_upload(img_bgr, tmp_img_path)
+        finally:
+            Path(tmp_img_path).unlink(missing_ok=True)
 
     log.info("  %d face(s) detected.", len(face_objs))
 
@@ -216,14 +246,22 @@ def run(
 
     for i, face_obj in enumerate(face_objs):
         region = face_obj.get("facial_area", face_obj.get("region", {}))
-        
-        # ── Quality Gatekeeper ─────────────────────────────────────────────
-        conf = face_obj.get("confidence", 1.0)
-        is_valid, reason = validate_face_region(region, img_bgr, (h_orig, w_orig), conf, i)
-        if not is_valid:
-            log.warning("  [REJECTED] Face %d: %s", i + 1, reason)
-            continue
-            
+
+        if is_live:
+            # ── Quality Gatekeeper (live only) ─────────────────────────────
+            conf = face_obj.get("confidence", 1.0)
+            is_valid, reason = validate_face_region(region, img_bgr, (h_orig, w_orig), conf, i)
+            if not is_valid:
+                log.warning("  [REJECTED] Face %d: %s", i + 1, reason)
+                continue
+        else:
+            # Upload: lenient filter — only reject truly tiny faces (Shubh branch logic)
+            x_chk, y_chk = region.get("x", 0), region.get("y", 0)
+            w_chk, h_chk = region.get("w", 0), region.get("h", 0)
+            if w_chk < MIN_FACE_SIZE or h_chk < MIN_FACE_SIZE:
+                log.debug("  Face %d too small (%d×%d) — skipped", i + 1, w_chk, h_chk)
+                continue
+
         x, y, w, h = region["x"], region["y"], region["w"], region["h"]
 
         x1 = max(0, x - PAD);  y1 = max(0, y - PAD)

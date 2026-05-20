@@ -258,6 +258,7 @@ def _run_inference(
     save_annotated: bool = True,
     generate_crops: bool = True,
     detector_backends: Optional[list[str]] = None,
+    is_live: bool = False,
 ) -> dict:
     """Write bytes to a temp file, run inference, return result dict."""
     suffix = Path(filename).suffix or ".jpg"
@@ -272,6 +273,7 @@ def _run_inference(
             save_annotated    = save_annotated,
             generate_crops    = generate_crops,
             detector_backends = detector_backends,
+            is_live           = is_live,
         )
     finally:
         Path(tmp_path).unlink(missing_ok=True)
@@ -386,11 +388,12 @@ async def predict_image(
 
     log.info("Processing upload: %s (%d bytes, type: %s)", file.filename, len(image_bytes), file.content_type)
     try:
-        # Upload page: prioritize accuracy for group photos
+        # Upload page: prioritize accuracy for group photos (is_live=False)
         result = _run_inference(
             image_bytes,
             file.filename,
-            detector_backends=["retinaface", "mtcnn", "opencv"]
+            detector_backends=["retinaface", "mtcnn", "opencv"],
+            is_live=False,
         )
     except Exception as exc:
         log.error("Inference failed: %s", exc, exc_info=True)
@@ -458,12 +461,13 @@ async def predict_base64(
         raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, f"File size exceeds {MAX_UPLOAD_SIZE_MB}MB limit.")
 
     try:
-        # Live mode: Enable crop generation for better visual feedback
+        # Live mode: Enable crop generation for better visual feedback (is_live=True)
         result = _run_inference(
             image_bytes,
             payload.filename,
             save_annotated=False,
-            generate_crops=True
+            generate_crops=True,
+            is_live=True,
         )
     except Exception as exc:
         log.error("Inference failed: %s", exc, exc_info=True)
