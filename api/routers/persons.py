@@ -69,6 +69,7 @@ class PersonOut(BaseModel):
     is_active   : bool
     added_by    : Optional[str]
     created_at  : str
+    warning     : Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -111,6 +112,7 @@ def _person_out(p: Person) -> dict:
         "is_active"  : p.is_active,
         "added_by"   : str(p.added_by) if p.added_by else None,
         "created_at" : p.created_at.isoformat(),
+        "warning"    : None,
     }
 
 
@@ -310,6 +312,7 @@ async def upload_photos(
 
     # ── Upload to GCS ─────────────────────────────────────────────────────
     gcs_folder = f"team_faces/{safe_name}"
+    upload_warning = None
     try:
         from storage.gcs_storage import GCSStorage
         gcs = GCSStorage()
@@ -320,6 +323,7 @@ async def upload_photos(
         # Non-fatal: files are saved locally; log and continue
         import logging
         logging.getLogger(__name__).warning("GCS upload failed: %s", e)
+        upload_warning = f"GCS upload failed: {str(e)}. Files were only saved locally."
 
     # ── Update DB ─────────────────────────────────────────────────────────
     person.gcs_path    = f"gs://{GCS_BUCKET_NAME}/{gcs_folder}/"
@@ -327,7 +331,10 @@ async def upload_photos(
 
     await db.commit()
     await db.refresh(person)
-    return _person_out(person)
+    out = _person_out(person)
+    if upload_warning:
+        out["warning"] = upload_warning
+    return out
 
 
 class RetrainResponse(PersonOut):

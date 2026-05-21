@@ -25,3 +25,7 @@ SETUP_GUIDE_LOCAL.md
 *.json
 *.pkl
 *.zip
+
+# User Added Exclusions
+data/
+bucket_list.txt
