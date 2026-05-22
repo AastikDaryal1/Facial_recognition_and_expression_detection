@@ -2,6 +2,7 @@
 config/settings.py
 ──────────────────
 Single source of truth for every configurable value.
+AUTO_RETRAIN_ON_DELETE = False  # When True, deleting a person triggers a global model retrain.
 All values are read from environment variables (or a .env file loaded
 by python-dotenv).  Hard-coded credentials from the original notebook
 have been REMOVED — pass them through environment / secrets manager.
@@ -62,6 +63,7 @@ SVM_KERNEL            = "rbf"
 TRAIN_TEST_SPLIT      = 0.2
 AUGMENT_NOISE_STD     = 0.01
 RANDOM_STATE          = 42
+AUTO_RETRAIN_ON_DELETE = os.getenv("AUTO_RETRAIN_ON_DELETE", "False").lower() in ("true", "1", "t")
 
 # ── Identity / recognition thresholds (from Shubh) ───────────────────────────
 SVM_CONFIDENCE_THRESHOLD    = float(os.getenv("SVM_CONFIDENCE_THRESHOLD",  "0.80"))

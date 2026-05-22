@@ -47,8 +47,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies import require_role
 from api.models import Person, User, UserRole
+import shutil
+import logging
 from db.base import get_db
-from config.settings import TEAM_FACES_DIR, GCS_BUCKET_NAME
+from config.settings import TEAM_FACES_DIR, GCS_BUCKET_NAME, AUTO_RETRAIN_ON_DELETE
+from utils.utils import sanitize_name
+
 
 router = APIRouter()
 
@@ -297,7 +301,7 @@ async def upload_photos(
             )
 
     # ── Local folder: data/raw/TeamFaces/<full_name>/ ─────────────────────
-    safe_name  = person.full_name.replace("/", "_").replace("..", "_")
+    safe_name  = sanitize_name(person.full_name)
     person_dir = TEAM_FACES_DIR / safe_name
     person_dir.mkdir(parents=True, exist_ok=True)
 
@@ -328,6 +332,33 @@ async def upload_photos(
     await db.commit()
     await db.refresh(person)
     return _person_out(person)
+
+
+@router.post("/retrain_all")
+async def retrain_all_persons(
+    current_user : User = Depends(require_role(["super_admin", "org_admin"])),
+):
+    """
+    Trigger global model retraining for all active enrolled persons.
+    """
+    try:
+        result = await asyncio.get_event_loop().run_in_executor(
+            None, _run_pipeline
+        )
+    except Exception as e:
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            f"Global pipeline retraining failed: {e}",
+        )
+
+    # Hot-reload the model into the running API state
+    try:
+        from api.app import hot_reload_model
+        hot_reload_model()
+    except ImportError:
+        pass
+
+    return {"status": "success", "retrain_result": result}
 
 
 class RetrainResponse(PersonOut):
@@ -414,6 +445,8 @@ async def delete_person(
     They remain in the database for audit purposes but won't appear in listings.
     Hard delete is not allowed to preserve historical integrity.
     """
+    # imports already at module level
+
     person = await _get_person_or_404(person_id, db)
     _check_person_access(current_user, person)
 
@@ -422,3 +455,31 @@ async def delete_person(
 
     person.is_active = False
     await db.commit()
+
+    # Cleanup local directory
+    safe_name = sanitize_name(person.full_name)
+    local_dir = TEAM_FACES_DIR / safe_name
+    if local_dir.is_dir():
+        try:
+            shutil.rmtree(local_dir, ignore_errors=True)
+            logging.getLogger(__name__).info("Deleted local person directory %s", local_dir)
+        except Exception as e:
+            logging.getLogger(__name__).warning("Failed to delete local directory %s: %s", local_dir, e)
+
+    # Delete GCS folder
+    try:
+        from storage.gcs_storage import GCSStorage
+        gcs = GCSStorage()
+        gcs_prefix = f"team_faces/{safe_name}/"
+        logging.getLogger(__name__).debug("Cleaning up GCS folder: %s", gcs_prefix)
+        gcs.delete_folder(gcs_prefix)
+    except Exception as e:
+        logging.getLogger(__name__).warning("GCS cleanup failed for %s: %s", person_id, e)
+
+    # Optional auto‑retrain after deletion
+    if AUTO_RETRAIN_ON_DELETE:
+        asyncio.create_task(
+            asyncio.get_event_loop().run_in_executor(None, _run_pipeline)
+        )
+
+    return None

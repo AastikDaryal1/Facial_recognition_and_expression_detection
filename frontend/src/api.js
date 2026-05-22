@@ -415,6 +415,16 @@ export async function retrainPerson(personId) {
   return data
 }
 
+/**
+ * Trigger global model retraining for all enrolled persons.
+ */
+export async function retrainAll() {
+  const res = await apiFetch('/persons/retrain_all', { method: 'POST' })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.detail || 'Global retrain failed.')
+  return data
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Sessions endpoints
 // ─────────────────────────────────────────────────────────────────────────────

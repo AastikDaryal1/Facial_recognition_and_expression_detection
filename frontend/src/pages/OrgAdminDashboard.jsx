@@ -13,12 +13,10 @@ import {
   ClipboardList, Activity
 } from 'lucide-react'
 import { useAuth } from '../AuthContext'
-import {
-  fetchUsers, deactivateUser, activateUser,
+import { fetchUsers, deactivateUser, activateUser,
   fetchPersons, createPerson, deletePerson,
   fetchSessions, deleteSession, updateSessionNote,
-  inviteUser,
-  uploadPersonPhotos, retrainPerson,
+  inviteUser, uploadPersonPhotos, retrainPerson, retrainAll,
   fetchOrganisations,
 } from '../api'
 
@@ -98,7 +96,8 @@ export default function OrgAdminDashboard() {
   const [uploadError, setUploadError] = useState('')
 
   // Retrain state
-  const [retrainingPersonId, setRetrainingPersonId] = useState(null)
+  const [retrainingPersonId, setRetrainingPersonId] = useState(null);
+  const [globalRetraining, setGlobalRetraining] = useState(false);
 
   const load = async () => {
     setLoading(true); setError('')
@@ -168,10 +167,17 @@ export default function OrgAdminDashboard() {
     try { await activateUser(id); load() } catch (e) { setError(e.message) }
   }
 
-  const handleDeletePerson = async (id) => {
-    if (!window.confirm('Remove this person from the enrolment list?')) return
-    try { await deletePerson(id); load() } catch (e) { setError(e.message) }
-  }
+  const handleGlobalRetrain = async () => {
+    if (!window.confirm('Run full model retraining on all enrolled persons? This may take several minutes. Continue?')) return;
+    setGlobalRetraining(true);
+    try {
+      await retrainAll();
+      load();
+    } catch (e) {
+      setError(e.message);
+    }
+    setGlobalRetraining(false);
+  };
 
   const handleUploadPhotos = async (personId) => {
     if (!uploadFiles.length) return
@@ -213,6 +219,16 @@ export default function OrgAdminDashboard() {
   const handleDeleteSession = async (id) => {
     if (!window.confirm('Delete this session record?')) return
     try { await deleteSession(id); load() } catch (e) { setError(e.message) }
+  }
+
+  const handleDeletePerson = async (personId) => {
+    if (!window.confirm('Delete this person? This will also remove their data from GCS.')) return;
+    try {
+      await deletePerson(personId);
+      load();
+    } catch (e) {
+      setError(e.message);
+    }
   }
 
   return (
@@ -392,13 +408,24 @@ export default function OrgAdminDashboard() {
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               <h3 style={{ margin: 0 }}>Enrolled Persons ({persons.length})</h3>
-              <button onClick={() => setShowNewPerson(true)} style={{
-                background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                border: 'none', borderRadius: '8px', padding: '0.6rem 1rem',
-                color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.875rem', fontWeight: 600,
-              }}>
-                <Plus size={14} /> Add Person
-              </button>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button onClick={() => setShowNewPerson(true)} style={{
+                  background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                  border: 'none', borderRadius: '8px', padding: '0.6rem 1rem',
+                  color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.875rem', fontWeight: 600,
+                }}>
+                  <Plus size={14} /> Add Person
+                </button>
+                <button onClick={handleGlobalRetrain} disabled={globalRetraining} style={{
+                  background: globalRetraining ? 'rgba(99,102,241,0.3)' : 'rgba(16,185,129,0.2)',
+                  border: '1px solid rgba(16,185,129,0.4)',
+                  borderRadius: '8px', padding: '0.6rem 1rem',
+                  color: '#34d399', cursor: globalRetraining ? 'wait' : 'pointer',
+                  display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.875rem', fontWeight: 600,
+                }}>
+                  {globalRetraining ? '⏳ Retraining…' : '🔁 Re‑train All'}
+                </button>
+              </div>
             </div>
             <div style={{ display: 'grid', gap: '0.75rem' }}>
               {persons.map(p => (

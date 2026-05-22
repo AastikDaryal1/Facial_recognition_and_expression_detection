@@ -24,11 +24,10 @@ class TestGroupEmotion:
     def test_disgust_maps_to_angry(self):
         assert group_emotion("disgust") == "angry"
 
-    def test_fear_not_in_groups_returns_itself(self):
-        # 'fear' is handled by rules in infer_emotion, not by groups
-        # group_emotion falls through to return original
+    def test_fear_maps_to_surprise(self):
+        # 'fear' is grouped under 'surprise' in config.settings
         result = group_emotion("fear")
-        assert result == "fear"
+        assert result == "surprise"
 
     def test_happy_maps_to_happy(self):
         assert group_emotion("happy") == "happy"

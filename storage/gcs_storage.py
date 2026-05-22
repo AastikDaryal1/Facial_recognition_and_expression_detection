@@ -39,6 +39,26 @@ class GCSStorage:
         self._bucket = self._client.bucket(bucket_name)
         log.info("GCSStorage initialised", extra={"bucket": bucket_name})
 
+    def delete_person_data(self, person: any, TEAM_FACES_DIR: Path) -> None:
+        """Delete local directory and GCS folder for a person."""
+        # Delete local directory containing the person's photos
+        safe_name = person.full_name.replace("/", "_").replace("..", "_")
+        local_dir = TEAM_FACES_DIR / safe_name
+        if local_dir.is_dir():
+            import shutil
+            try:
+                shutil.rmtree(local_dir, ignore_errors=True)
+                log.info("Deleted local person directory %s", local_dir)
+            except Exception as e:
+                log.warning("Failed to delete local directory %s: %s", local_dir, e)
+
+        # Delete GCS folder for the person
+        try:
+            gcs_prefix = f"team_faces/{safe_name}/"
+            self.delete_folder(gcs_prefix)
+        except Exception as e:
+            log.warning("GCS cleanup failed for %s: %s", person.id, e)
+
     # ── Construction ───────────────────────────────────────────────────────
     @staticmethod
     def _build_client(key_path: str, project_id: str) -> storage.Client:
@@ -127,7 +147,17 @@ class GCSStorage:
         self._bucket.blob(remote_path).upload_from_filename(str(local_path))
         log.info("Upload complete: %s", remote_path)
 
-    def upload_many(self, file_map: dict[str, str]) -> None:
-        """Upload multiple files.  file_map = {local_path: remote_path}"""
-        for local, remote in file_map.items():
-            self.upload_file(local, remote)
+    def delete_folder(self, prefix: str) -> None:
+        """Delete all blobs under the given prefix (folder) in the bucket."""
+        blobs = list(self._bucket.list_blobs(prefix=prefix))
+        if not blobs:
+            log.debug("No blobs found for prefix %s to delete.", prefix)
+            return
+        for blob in blobs:
+            try:
+                blob.delete()
+                log.info("Deleted GCS blob %s", blob.name)
+            except Exception as e:
+                log.warning("Failed to delete blob %s: %s", blob.name, e)
+        log.info("Completed deletion of GCS folder %s (deleted %d blobs)", prefix, len(blobs))
+
