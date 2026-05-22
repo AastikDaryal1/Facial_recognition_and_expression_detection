@@ -1,27 +1,79 @@
+# =========================
 # Virtual Environments
+# =========================
 .venv/
 venv/
 venv_clean/
 venv310/
 
-# Dependencies
+# =========================
+# Node Dependencies
+# =========================
 node_modules/
 
+# =========================
 # Python Cache
+# =========================
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.pytest_cache/
 
-# Project Specific
-logs/
-data/output/
-face_app.db
-secrets/
+# =========================
+# Environment & Secrets
+# =========================
 .env
+.env.*
+secrets/
+*.key
+*.pem
+*.crt
+service-account*.json
 
-# Local Documentation (Private)
+# =========================
+# Logs
+# =========================
+logs/
+*.log
+logs.txt
+
+# =========================
+# Local Data / Generated Data
+# =========================
+data/
+data/output/
+bucket_list.txt
+
+# =========================
+# Database
+# =========================
+face_app.db
+*.db
+
+# =========================
+# Local Documentation
+# =========================
 SETUP_GUIDE_LOCAL.md
 
-# Large/Auto-generated Files
-*.json
-*.pkl
+# =========================
+# ML Models / Generated Files
+# =========================
 *.zip
+
+# Uncomment below ONLY if you
+# do NOT want model files tracked
+# *.json
+# *.pkl
+
+# =========================
+# VS Code / IDE
+# =========================
+.vscode/
+.idea/
+
+# =========================
+# OS Files
+# =========================
+.DS_Store
+Thumbs.db
