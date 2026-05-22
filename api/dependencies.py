@@ -33,7 +33,13 @@ async def get_current_user(
     if await is_blacklisted(payload["jti"]):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token has been revoked.")
 
-    user = await db.get(User, payload["sub"])
+    import uuid
+    try:
+        user_id = uuid.UUID(payload["sub"])
+    except ValueError:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid user ID in token.")
+
+    user = await db.get(User, user_id)
     if not user or not user.is_active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User not found or deactivated.")
 

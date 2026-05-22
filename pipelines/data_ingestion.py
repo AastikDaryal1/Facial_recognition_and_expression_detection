@@ -73,8 +73,25 @@ def run(force_retrain: bool = False) -> dict:
     log.info("PIPELINE 1 — DATA INGESTION  (force_retrain=%s)", force_retrain)
     log.info("=" * 60)
 
-    gcs = GCSStorage()
+    gcs = None
+    try:
+        gcs = GCSStorage()
+    except Exception as e:
+        log.warning("⚠️ Failed to initialize GCS Storage: %s. Falling back to local data if available.", e)
+
     result = {"model_loaded": False, "data_ready": False, "elapsed_s": 0.0}
+
+    # If GCS failed but data exists locally, we are good to go!
+    if gcs is None:
+        if TEAM_FACES_DIR.exists():
+            log.info("✅ Local TeamFaces directory found. Proceeding with local training.")
+            result["data_ready"] = True
+            result["elapsed_s"] = time.time() - t0
+            return result
+        else:
+            raise RuntimeError(
+                f"GCS Storage initialization failed and no local data found in {TEAM_FACES_DIR}."
+            )
 
     # ── Step 1: Try to load existing saved model ──────────────────────────
     if not force_retrain:

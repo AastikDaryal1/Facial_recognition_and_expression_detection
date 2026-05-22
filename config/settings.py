@@ -81,7 +81,7 @@ EMOTION_GROUPS = {
     "sad"     : ["sad"],
     "happy"   : ["happy"],
     "neutral" : ["neutral"],
-    "surprise": ["surprise", "fear"],
+    "surprise": ["surprise"],
 }
 
 # ── Colour maps ───────────────────────────────────────────────────────────────
