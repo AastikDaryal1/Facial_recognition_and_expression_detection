@@ -51,6 +51,7 @@ services:
       - ./data:/app/data
       - ./saved_models:/app/saved_models
       - ./storage:/app/storage
+      - ./secrets:/app/secrets
     env_file:
       - .env
     restart: unless-stopped

@@ -17,7 +17,7 @@ import { useAuth } from '../AuthContext'
 import {
   fetchMetrics, fetchOrganisations, createOrganisation,
   fetchUsers, deactivateUser, activateUser, changeUserRole,
-  deleteUser, inviteUser, fetchAuditLogs, fetchSessions,
+  deleteUser, inviteUser, fetchAuditLogs, fetchSessions, triggerSync
 } from '../api'
 
 const TABS = ['Overview', 'Organisations', 'Users', 'Sessions', 'Audit Logs']

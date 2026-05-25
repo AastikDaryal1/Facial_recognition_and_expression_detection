@@ -132,7 +132,7 @@ async def refresh_token(payload_body: RefreshRequest, db: AsyncSession = Depends
     if await is_blacklisted(payload["jti"]):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token has been revoked.")
 
-    user = await db.get(User, payload["sub"])
+    user = await db.get(User, uuid.UUID(payload["sub"]))
     if not user or not user.is_active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User not found.")
 
