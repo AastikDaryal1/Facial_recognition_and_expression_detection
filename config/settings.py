@@ -154,6 +154,9 @@ JWT_EXPIRE_MINUTES        = int(os.getenv("JWT_EXPIRE_MINUTES", "1440"))
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
 
 # ── Email (from veerojasvi) ───────────────────────────────────────────────────
-RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+SMTP_HOST     = os.getenv("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT     = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER     = os.getenv("SMTP_USER", "")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 FRONTEND_URL   = os.getenv("FRONTEND_URL", "http://localhost:5173")
-FROM_EMAIL     = os.getenv("FROM_EMAIL", "onboarding@resend.dev")
+FROM_EMAIL    = os.getenv("FROM_EMAIL", "")

@@ -24,7 +24,7 @@ import { checkSetup, signupSuperAdmin } from '../api'
 const ROLE_HOME = {
   super_admin : '/admin',
   org_admin   : '/org-dashboard',
-  user        : '/',
+  member      : '/',
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -100,6 +100,7 @@ function PasswordInput({ value, onChange, placeholder, autoComplete }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function SetupForm({ onSuccess }) {
+  const [fullName, setFullName] = useState('')
   const [orgName,  setOrgName]  = useState('')
   const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')
@@ -109,7 +110,7 @@ function SetupForm({ onSuccess }) {
 
   const handleSetup = async (e) => {
     e.preventDefault()
-    if (!orgName || !email || !password) {
+    if (!fullName || !orgName || !email || !password) {
       setError('Please fill in all fields.')
       return
     }
@@ -124,7 +125,7 @@ function SetupForm({ onSuccess }) {
     setLoading(true)
     setError('')
     try {
-      const result = await signupSuperAdmin(email, password, orgName)
+      const result = await signupSuperAdmin(fullName, email, password, orgName)
       onSuccess(result)
     } catch (err) {
       setError(err.message || 'Setup failed. Please try again.')
@@ -174,6 +175,23 @@ function SetupForm({ onSuccess }) {
       </p>
 
       <form onSubmit={handleSetup}>
+
+        {/* Full Name */}
+        <div style={{ marginBottom: '1.2rem' }}>
+          <label style={labelStyle}>Full Name</label>
+          <div style={{ position: 'relative' }}>
+            <Building2 size={16} style={iconStyle} />
+            <input
+              type        = "text"
+              value       = {fullName}
+              onChange    = {(e) => setFullName(e.target.value)}
+              placeholder = "Your full name"
+              style       = {inputStyle}
+              onFocus     = {(e) => e.target.style.borderColor = 'rgba(99,102,241,0.6)'}
+              onBlur      = {(e) => e.target.style.borderColor = 'rgba(71,85,105,0.5)'}
+            />
+          </div>
+        </div>
 
         {/* Organisation name */}
         <div style={{ marginBottom: '1.2rem' }}>

@@ -6,7 +6,7 @@
  * Handles JWT token storage, attachment, and auto-refresh on 401.
  */
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+const API_BASE = import.meta.env.VITE_API_BASE_URL || `${window.location.protocol}//${window.location.hostname}:8000`
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Token storage (in memory — more secure than localStorage for access tokens)
@@ -209,14 +209,16 @@ export async function logout() {
   clearTokens()
 }
 
-export async function signupInvite(email, password, inviteToken) {
+export async function signupInvite(fullName, email, password, contact, inviteToken) {
   const res = await fetch(`${API_BASE}/auth/signup-invite`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
+      full_name    : fullName,
       email,
       password,
-      invite_token: inviteToken,
+      contact      : contact || null,
+      invite_token : inviteToken,
     }),
   })
 
@@ -466,11 +468,11 @@ export async function checkSetup() {
   return data.setup_complete
 }
 
-export async function signupSuperAdmin(email, password, orgName) {
+export async function signupSuperAdmin(fullName, email, password, orgName) {
   const res = await fetch(`${API_BASE}/auth/signup`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password, org_name: orgName }),
+    body: JSON.stringify({ full_name: fullName, email, password, org_name: orgName }),
   })
   const data = await res.json()
   if (!res.ok) throw new Error(data.detail || 'Setup failed.')

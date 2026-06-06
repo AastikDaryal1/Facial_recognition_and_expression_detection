@@ -9,9 +9,10 @@ from api.models import UserRole
 
 
 class SignupRequest(BaseModel):
-    email    : EmailStr
-    password : str
-    org_name : str          # creates a new org at signup (for super_admin seeding)
+    full_name : str
+    email     : EmailStr
+    password  : str
+    org_name  : str          # creates a new org at signup (for super_admin seeding)
 
 
 class LoginRequest(BaseModel):
@@ -20,15 +21,17 @@ class LoginRequest(BaseModel):
 
 
 class InviteSignupRequest(BaseModel):
+    full_name    : str
     email        : EmailStr
     password     : str
-    invite_token : str      # token issued by /auth/invite
+    contact      : str | None = None
+    invite_token : str        # token issued by /auth/invite
 
 
 class InviteRequest(BaseModel):
     email  : EmailStr
-    role   : UserRole        # org_admin or user only (super_admin invites via CLI)
-    org_id : str | None = None  # required when super_admin invites; ignored for org_admin
+    role   : str        # org_admin or member only
+    org_id : str | None = None
 
 
 class TokenResponse(BaseModel):
@@ -38,9 +41,10 @@ class TokenResponse(BaseModel):
 
 
 class UserOut(BaseModel):
-    id    : str
-    email : str
-    role  : UserRole
-    org_id: str | None
+    id        : str
+    full_name : str
+    email     : str
+    role      : str
+    org_id    : str | None
 
     model_config = {"from_attributes": True}
