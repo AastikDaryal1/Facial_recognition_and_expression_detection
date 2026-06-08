@@ -29,7 +29,7 @@ from api.auth.service import (
     _make_token,
 )
 from api.dependencies import get_current_user, require_role
-from api.models import Organisation, User, UserRole
+from api.models import Organisation, User
 from api.routers.audit import write_audit_log
 from db.base import get_db
 
@@ -71,13 +71,13 @@ async def signup(payload: SignupRequest, db: AsyncSession = Depends(get_db)):
             db=db, actor_id=user.id, org_id=org.id,
             action="auth.signup",
             target_type="user", target_id=str(user.id),
-            detail={"email": user.email, "role": user.role.value},
+            detail={"email": user.email, "role": user.role},
         )
         await db.commit()
         await db.refresh(user)
 
         return TokenResponse(
-            access_token  = create_access_token(str(user.id), user.role.value, str(user.org_id)),
+            access_token  = create_access_token(str(user.id), user.role, str(user.org_id)),
             refresh_token = create_refresh_token(str(user.id)),
         )
     except Exception as e:
@@ -100,7 +100,7 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
     await db.commit()
 
     return TokenResponse(
-        access_token  = create_access_token(str(user.id), user.role.value, str(user.org_id)),
+        access_token  = create_access_token(str(user.id), user.role, str(user.org_id)),
         refresh_token = create_refresh_token(str(user.id)),
     )
 
@@ -128,7 +128,7 @@ async def refresh_token(payload_body: RefreshRequest, db: AsyncSession = Depends
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User not found.")
 
     return TokenResponse(
-        access_token  = create_access_token(str(user.id), user.role.value, str(user.org_id)),
+        access_token  = create_access_token(str(user.id), user.role, str(user.org_id)),
         refresh_token = create_refresh_token(str(user.id)),
     )
 
@@ -171,7 +171,7 @@ async def invite_user(
         {
             "sub"          : str(current_user.id),
             "invite_email" : payload.email,
-            "invite_role"  : payload.role.value,
+            "invite_role"  : payload.role,          # plain string, no .value
             "org_id"       : str(effective_org_id),
         },
         timedelta(hours=48),
@@ -188,7 +188,7 @@ async def invite_user(
         to_email     = payload.email,
         invite_token = token,
         invited_by   = current_user.email,
-        role         = payload.role.value,
+        role         = payload.role,                # plain string, no .value
         org_name     = org_name,
         frontend_url = frontend_url,
     )
@@ -197,7 +197,7 @@ async def invite_user(
         db=db, actor_id=current_user.id, org_id=effective_org_id,
         action="auth.invite",
         target_type="user", target_id=None,
-        detail={"invited_email": payload.email, "role": payload.role.value, "org_id": str(effective_org_id)},
+        detail={"invited_email": payload.email, "role": payload.role, "org_id": str(effective_org_id)},
     )
     await db.commit()
 
@@ -233,7 +233,7 @@ async def signup_invite(payload: InviteSignupRequest, db: AsyncSession = Depends
             email         = payload.email,
             password_hash = hash_password(payload.password),
             contact       = payload.contact,
-            role          = invite["invite_role"],
+            role          = invite["invite_role"],   # plain string from token
             org_id        = uuid.UUID(invite["org_id"]) if invite.get("org_id") else None,
             invited_by    = uuid.UUID(invite["sub"])    if invite.get("sub")    else None,
         )
@@ -242,13 +242,13 @@ async def signup_invite(payload: InviteSignupRequest, db: AsyncSession = Depends
             db=db, actor_id=user.id, org_id=user.org_id,
             action="auth.invite_accept",
             target_type="user", target_id=str(user.id),
-            detail={"email": user.email, "role": user.role.value, "invited_by": invite["sub"]},
+            detail={"email": user.email, "role": user.role, "invited_by": invite["sub"]},
         )
         await db.commit()
         await db.refresh(user)
 
         return TokenResponse(
-            access_token  = create_access_token(str(user.id), user.role.value, str(user.org_id)),
+            access_token  = create_access_token(str(user.id), user.role, str(user.org_id)),
             refresh_token = create_refresh_token(str(user.id)),
         )
     except Exception as e:

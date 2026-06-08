@@ -28,7 +28,7 @@ from sqlalchemy import select, desc, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies import require_role
-from api.models import AuditLog, User, UserRole
+from api.models import AuditLog, User
 from db.base import get_db
 
 router = APIRouter()
@@ -125,7 +125,7 @@ async def list_audit_logs(
     filters = []
 
     # Scope by org for org_admin
-    if current_user.role == UserRole.org_admin:
+    if current_user.role == "org_admin":
         filters.append(AuditLog.org_id == current_user.org_id)
 
     # Optional filters
@@ -178,7 +178,7 @@ async def get_audit_log(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Audit log entry not found.")
 
     # org_admin can only see logs from their own org
-    if current_user.role == UserRole.org_admin and log.org_id != current_user.org_id:
+    if current_user.role == "org_admin" and log.org_id != current_user.org_id:
         raise HTTPException(status.HTTP_403_FORBIDDEN,
                             "You can only access audit logs for your own organisation.")
 

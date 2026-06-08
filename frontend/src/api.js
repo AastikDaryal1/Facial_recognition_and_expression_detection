@@ -250,12 +250,6 @@ export async function fetchMetrics() {
   return res.json()
 }
 
-export async function triggerSync() {
-  const res = await apiFetch('/system/sync', { method: 'POST' })
-  if (!res.ok) throw new Error('Failed to trigger sync.')
-  return res.json()
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Prediction endpoints
 // ─────────────────────────────────────────────────────────────────────────────
@@ -274,10 +268,10 @@ export async function predictImage(file) {
   return data
 }
 
-export async function predictBase64(image_b64, filename = 'live.jpg') {
+export async function predictBase64(image_b64, filename = 'live.jpg', detection_method = 'Live Feed') {
   const res = await apiFetch('/predict/base64', {
     method: 'POST',
-    body: JSON.stringify({ image_b64, filename }),
+    body: JSON.stringify({ image_b64, filename, detection_method }),
   })
 
   const data = await res.json()
@@ -353,6 +347,11 @@ export async function createOrganisation(name) {
   const data = await res.json()
   if (!res.ok) throw new Error(data.detail || 'Failed to create organisation.')
   return data
+}
+
+export async function deleteOrganisation(orgId) {
+  const res = await apiFetch(`/organisations/${orgId}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error('Failed to delete organisation.')
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -460,6 +459,20 @@ export async function fetchAuditLogs() {
   const res = await apiFetch('/audit')
   if (!res.ok) throw new Error('Failed to fetch audit logs.')
   return res.json()
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// System / Cloud Sync
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Manually trigger a GCS cloud sync + model retrain (super_admin only).
+ */
+export async function triggerSync() {
+  const res = await apiFetch('/system/sync', { method: 'POST' })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.detail || 'Sync failed.')
+  return data
 }
 
 export async function checkSetup() {

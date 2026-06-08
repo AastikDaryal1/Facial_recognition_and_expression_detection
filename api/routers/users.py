@@ -2,6 +2,7 @@
 api/routers/users.py
 ─────────────────────
 User management endpoints with full role-based access control.
+Role is a plain string column: "super_admin", "org_admin", "member"
 """
 
 from uuid import UUID
@@ -12,11 +13,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies import get_current_user, require_role
-from api.models import User, UserRole
+from api.models import User
 from api.routers.audit import write_audit_log
 from db.base import get_db
 
 router = APIRouter()
+
+VALID_ROLES = {"super_admin", "org_admin", "member"}
 
 
 class UserOut(BaseModel):
@@ -39,7 +42,7 @@ def _user_out(user: User) -> dict:
         "id"        : str(user.id),
         "full_name" : user.full_name,
         "email"     : user.email,
-        "role"      : user.role,
+        "role"      : user.role,          # plain string — no .value
         "org_id"    : str(user.org_id) if user.org_id else None,
         "is_active" : user.is_active,
     }
@@ -99,16 +102,19 @@ async def change_user_role(
     current_user : User = Depends(require_role(["super_admin"])),
     db           : AsyncSession = Depends(get_db),
 ):
+    if payload.role not in VALID_ROLES:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Invalid role. Must be one of: {VALID_ROLES}")
+
     target = await _get_user_or_404(user_id, db)
     if str(target.id) == str(current_user.id):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "You cannot change your own role.")
 
-    old_role   = target.role.value
+    old_role    = target.role          # plain string — no .value
     target.role = payload.role
     await write_audit_log(
         db=db, actor_id=current_user.id, org_id=current_user.org_id,
         action="user.role_change", target_type="user", target_id=str(target.id),
-        detail={"email": target.email, "old_role": old_role, "new_role": payload.role.value},
+        detail={"email": target.email, "old_role": old_role, "new_role": payload.role},
     )
     await db.commit()
     await db.refresh(target)
@@ -132,7 +138,7 @@ async def deactivate_user(
     await write_audit_log(
         db=db, actor_id=current_user.id, org_id=current_user.org_id,
         action="user.deactivate", target_type="user", target_id=str(target.id),
-        detail={"email": target.email, "role": target.role.value},
+        detail={"email": target.email, "role": target.role},   # plain string
     )
     await db.commit()
     await db.refresh(target)
@@ -154,7 +160,7 @@ async def activate_user(
     await write_audit_log(
         db=db, actor_id=current_user.id, org_id=current_user.org_id,
         action="user.activate", target_type="user", target_id=str(target.id),
-        detail={"email": target.email, "role": target.role.value},
+        detail={"email": target.email, "role": target.role},   # plain string
     )
     await db.commit()
     await db.refresh(target)
@@ -174,7 +180,7 @@ async def delete_user(
     await write_audit_log(
         db=db, actor_id=current_user.id, org_id=current_user.org_id,
         action="user.delete", target_type="user", target_id=str(target.id),
-        detail={"email": target.email, "role": target.role.value},
+        detail={"email": target.email, "role": target.role},   # plain string
     )
     await db.delete(target)
     await db.commit()

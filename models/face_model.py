@@ -102,9 +102,9 @@ class FaceRecognizer:
                 name = candidate
             else:
                 log.warning("Rejected identity candidate '%s' (not in authorized members list)", candidate)
-                name = "Unknown Subject"
+                name = "Unrecognised"
         else:
-            name = "Unknown Subject"
+            name = "Unrecognised"
 
         return {
             "name"      : name,

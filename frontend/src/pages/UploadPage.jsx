@@ -55,7 +55,7 @@ function FaceCard({ face, delay, onHover, isHighlighted }) {
       <div className="face-card-left"><FaceAvatar face={face} color={color} /></div>
       <div className="face-card-middle">
         <p style={{ fontWeight: 600, color: isUnknown ? 'var(--muted)' : 'var(--text)' }}>
-          {isUnknown ? 'IDENTIFYING...' : face.name}
+          {isUnknown ? 'Unrecognised' : face.name}
         </p>
         <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '4px',
           backgroundColor: `${color}22`, color, border: `1px solid ${color}44`,
@@ -389,7 +389,7 @@ export default function UploadPage() {
                 <span className="badge">Unknown: {result.n_faces - result.n_identified}</span>
               </div>
               {(() => {
-                const isKnownName = n => n && n.toUpperCase() !== 'UNKNOWN' && n.toLowerCase() !== 'unknown subject'
+                const isKnownName = n => n && n.toUpperCase() !== 'UNKNOWN' && n.toLowerCase() !== 'unknown subject' && n.toLowerCase() !== 'unrecognised'
                 const known = result.results.filter(p => isKnownName(p.name))
                 const unknown = result.results.filter(p => !isKnownName(p.name))
                 return (

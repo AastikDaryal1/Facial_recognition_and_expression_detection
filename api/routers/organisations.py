@@ -22,7 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies import get_current_user, require_role
-from api.models import Organisation, User, UserRole
+from api.models import Organisation, User
 from api.routers.audit import write_audit_log
 from db.base import get_db
 
@@ -75,7 +75,7 @@ async def _get_org_or_404(org_id: str, db: AsyncSession) -> Organisation:
 def _check_org_access(current_user: User, org: Organisation) -> None:
     """org_admin can only view/touch their own org."""
     if (
-        current_user.role == UserRole.org_admin
+        current_user.role == "org_admin"
         and org.id != current_user.org_id
     ):
         raise HTTPException(
@@ -98,7 +98,7 @@ async def list_organisations(
     - super_admin  → sees ALL organisations
     - org_admin    → sees ONLY their own organisation
     """
-    if current_user.role == UserRole.super_admin:
+    if current_user.role == "super_admin":
         result = await db.execute(select(Organisation))
     else:
         result = await db.execute(

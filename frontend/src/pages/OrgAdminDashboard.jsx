@@ -220,6 +220,19 @@ export default function OrgAdminDashboard() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)', color: '#f1f5f9' }}>
+      <style>{`
+        @keyframes pulse {
+          0% { opacity: 0.4; transform: scale(0.9); }
+          50% { opacity: 1; transform: scale(1.15); }
+          100% { opacity: 0.4; transform: scale(0.9); }
+        }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+        .spin {
+          animation: spin 1s linear infinite;
+        }
+      `}</style>
 
       {/* Navbar */}
       <header style={{ background: 'rgba(15,23,42,0.8)', backdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(99,102,241,0.2)', padding: '0 2rem', height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 100 }}>
@@ -262,7 +275,7 @@ export default function OrgAdminDashboard() {
         {tab === 'Overview' && (
           <div>
             {/* Stat cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
               <StatCard icon={Users}      label="Team Members"     value={users.length}                                        color="#6366f1" />
               <StatCard icon={ScanFace}   label="Enrolled Persons" value={`${enrolled}/${persons.length}`}                    color="#10b981" sub="enrolled / total" />
               <StatCard icon={ClipboardList} label="Total Scans"   value={sessions.length}                                    color="#f59e0b" />
@@ -289,10 +302,11 @@ export default function OrgAdminDashboard() {
                   ? <p style={{ color: '#475569', fontSize: '0.85rem', margin: '2rem 0', textAlign: 'center' }}>No scan data yet.</p>
                   : <ResponsiveContainer width="100%" height={180}>
                       <PieChart>
-                        <Pie data={emotionDist} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={65} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false} fontSize={10}>
+                        <Pie data={emotionDist} dataKey="value" nameKey="name" cx="50%" cy="40%" outerRadius={55} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false} fontSize={10}>
                           {emotionDist.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
                         </Pie>
                         <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid rgba(99,102,241,0.3)', borderRadius: '8px', color: '#f1f5f9' }} />
+                        <Legend wrapperStyle={{ color: '#94a3b8', fontSize: '0.78rem', marginTop: '10px' }} />
                       </PieChart>
                     </ResponsiveContainer>
                 }
@@ -301,17 +315,24 @@ export default function OrgAdminDashboard() {
 
             {/* Enrolled vs Pending bar */}
             <ChartCard title="Enrolled vs Pending Persons">
-              <ResponsiveContainer width="100%" height={120}>
-                <BarChart layout="vertical" data={[{ name: 'Persons', enrolled, pending: persons.length - enrolled }]}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(71,85,105,0.3)" />
-                  <XAxis type="number" tick={{ fill: '#64748b', fontSize: 11 }} />
-                  <YAxis type="category" dataKey="name" tick={{ fill: '#64748b', fontSize: 11 }} />
-                  <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid rgba(99,102,241,0.3)', borderRadius: '8px', color: '#f1f5f9' }} />
-                  <Legend wrapperStyle={{ color: '#94a3b8', fontSize: '0.8rem' }} />
-                  <Bar dataKey="enrolled" fill="#10b981" radius={[0, 4, 4, 0]} />
-                  <Bar dataKey="pending"  fill="#f59e0b" radius={[0, 4, 4, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              {persons.length === 0 ? (
+                <div style={{ padding: '1.5rem 1rem', textAlign: 'center' }}>
+                  <p style={{ color: '#64748b', fontSize: '0.85rem', margin: 0 }}>No persons enrolled or pending yet.</p>
+                  <p style={{ color: '#475569', fontSize: '0.75rem', margin: '0.25rem 0 0' }}>Go to the "Enrolled Persons" tab and add a person to start.</p>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={120}>
+                  <BarChart layout="vertical" data={[{ name: 'Persons', enrolled, pending: persons.length - enrolled }]}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(71,85,105,0.3)" />
+                    <XAxis type="number" allowDecimals={false} tick={{ fill: '#64748b', fontSize: 11 }} />
+                    <YAxis type="category" dataKey="name" tick={{ fill: '#64748b', fontSize: 11 }} />
+                    <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid rgba(99,102,241,0.3)', borderRadius: '8px', color: '#f1f5f9' }} />
+                    <Legend wrapperStyle={{ color: '#94a3b8', fontSize: '0.8rem' }} />
+                    <Bar dataKey="enrolled" fill="#10b981" radius={[0, 4, 4, 0]} />
+                    <Bar dataKey="pending"  fill="#f59e0b" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </ChartCard>
 
             {/* Quick actions */}
@@ -434,19 +455,32 @@ export default function OrgAdminDashboard() {
                   {sessions.map(s => {
                     const isExpanded    = expandedSession === s.id
                     const isEditingNote = editingNoteId   === s.id
-                    const results       = s.results_json?.results || (Array.isArray(s.results_json) ? s.results_json : [])
-                    const known         = results.filter(f => f.name && f.name.toUpperCase() !== 'UNKNOWN')
-                    const unknown       = results.filter(f => !f.name || f.name.toUpperCase() === 'UNKNOWN')
+                    const resultsData   = s.results_json || {}
+                    const results       = resultsData.results || (Array.isArray(s.results_json) ? s.results_json : [])
+                    const method        = resultsData.detection_method || (s.annotated_image ? 'Upload' : 'Unknown')
+                    const isKnown = (n) => n && n.toUpperCase() !== 'UNKNOWN' && n.toLowerCase() !== 'unknown subject' && n.toLowerCase() !== 'unrecognised'
+                    const known         = results.filter(f => isKnown(f.name))
+                    const unknown       = results.filter(f => !isKnown(f.name))
+                    const methodBadge = {
+                      'Upload':    { color: '#60a5fa', bg: 'rgba(96,165,250,0.12)', border: 'rgba(96,165,250,0.35)',  icon: '📤' },
+                      'Snapshot':  { color: '#fbbf24', bg: 'rgba(251,191,36,0.12)',  border: 'rgba(251,191,36,0.35)',  icon: '📸' },
+                      'Live Feed': { color: '#34d399', bg: 'rgba(52,211,153,0.12)',  border: 'rgba(52,211,153,0.35)',  icon: '🎥' },
+                    }[method] || { color: '#94a3b8', bg: 'rgba(148,163,184,0.1)', border: 'rgba(148,163,184,0.3)', icon: '❓' }
                     return (
                       <div key={s.id} style={{ background: 'rgba(15,23,42,0.6)', border: `1px solid ${isExpanded ? 'rgba(99,102,241,0.4)' : 'rgba(71,85,105,0.3)'}`, borderRadius: '10px', overflow: 'hidden' }}>
                         <div style={{ padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
                           <div style={{ flex: 1 }}>
-                            <p style={{ margin: 0, fontWeight: 600, fontSize: '0.9rem' }}>
-                              {s.n_faces} face{s.n_faces !== 1 ? 's' : ''} detected
-                              <span style={{ color: '#34d399', marginLeft: '0.5rem' }}>· {s.n_identified} identified</span>
-                              {s.n_faces - s.n_identified > 0 && <span style={{ color: '#f87171', marginLeft: '0.5rem' }}>· {s.n_faces - s.n_identified} unknown</span>}
-                            </p>
-                            <p style={{ margin: '0.2rem 0 0', color: '#64748b', fontSize: '0.78rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
+                              <p style={{ margin: 0, fontWeight: 600, fontSize: '0.9rem' }}>
+                                {s.n_faces} face{s.n_faces !== 1 ? 's' : ''} detected
+                                <span style={{ color: '#34d399', marginLeft: '0.5rem' }}>· {s.n_identified} identified</span>
+                                {s.n_faces - s.n_identified > 0 && <span style={{ color: '#f87171', marginLeft: '0.5rem' }}>· {s.n_faces - s.n_identified} unknown</span>}
+                              </p>
+                              <span style={{ background: methodBadge.bg, border: `1px solid ${methodBadge.border}`, borderRadius: '20px', padding: '0.15rem 0.6rem', fontSize: '0.7rem', color: methodBadge.color, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                                {methodBadge.icon} {method}
+                              </span>
+                            </div>
+                            <p style={{ margin: 0, color: '#64748b', fontSize: '0.78rem' }}>
                               {s.created_at ? new Date(s.created_at).toLocaleString() : ''} · {s.elapsed_s}s
                               {s.note && <span style={{ marginLeft: '0.75rem', color: '#a5b4fc' }}>📝 {s.note}</span>}
                             </p>
@@ -471,7 +505,14 @@ export default function OrgAdminDashboard() {
                         )}
                         {isExpanded && (
                           <div style={{ borderTop: '1px solid rgba(71,85,105,0.25)', padding: '1rem 1.25rem', background: 'rgba(15,23,42,0.4)' }}>
-                            {s.annotated_image && <img src={`data:image/jpeg;base64,${s.annotated_image}`} alt="Annotated" style={{ width: '100%', maxWidth: '480px', borderRadius: '8px', border: '1px solid rgba(99,102,241,0.3)', display: 'block', marginBottom: '1rem' }} />}
+                            {s.annotated_image ? (
+                              <div style={{ marginBottom: '1rem' }}>
+                                <p style={{ margin: '0 0 0.5rem', fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>📸 Annotated Image</p>
+                                <img src={`data:image/jpeg;base64,${s.annotated_image}`} alt="Annotated" style={{ width: '100%', maxWidth: '480px', borderRadius: '8px', border: `1px solid ${methodBadge.border}`, display: 'block' }} />
+                              </div>
+                            ) : method === 'Live Feed' ? (
+                              <p style={{ margin: '0 0 0.75rem', fontSize: '0.78rem', color: '#475569', fontStyle: 'italic' }}>🎥 Live Feed frames are not saved as images.</p>
+                            ) : null}
                             {results.length === 0
                               ? <p style={{ color: '#64748b', fontSize: '0.85rem', margin: 0 }}>No detailed results stored.</p>
                               : <>

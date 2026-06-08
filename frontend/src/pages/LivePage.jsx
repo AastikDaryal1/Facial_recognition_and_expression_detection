@@ -185,38 +185,43 @@ function FaceCard({ face, delay = 0, onHover, isHighlighted }) {
 function Legend() {
   const emotions = ['angry', 'happy', 'neutral', 'sad', 'surprise']
   return (
-    <div className="legend-container glass-card fade-in" style={{ marginTop: '2rem' }}>
-      <div className="legend-section">
-        <h4 className="legend-title">Emotion Gating</h4>
-        <div className="legend-items">
-          {emotions.map((emotion) => (
-            <div className="legend-item" key={emotion}>
-              <span className="legend-color-box" style={{ backgroundColor: getEmotionColor(emotion) }}></span>
-              <span className="legend-text" style={{ textTransform: 'capitalize' }}>
-                {emotion}
-              </span>
-            </div>
-          ))}
-        </div>
+    <div className="glass-card fade-in" style={{
+      marginTop: '1.5rem',
+      padding: '0.75rem 1.25rem',
+      display: 'flex',
+      flexWrap: 'wrap',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: '1.5rem',
+      borderRadius: '0.75rem',
+      background: 'rgba(15, 23, 42, 0.45)',
+      backdropFilter: 'blur(20px)',
+      border: '1px solid var(--card-border)',
+    }}>
+      {/* Emotions Section */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: '0.75rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Emotions:</span>
+        {emotions.map((emotion) => (
+          <div key={emotion} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: getEmotionColor(emotion), display: 'inline-block', boxShadow: `0 0 6px ${getEmotionColor(emotion)}` }}></span>
+            <span style={{ fontSize: '0.8rem', textTransform: 'capitalize', color: 'var(--text)', fontWeight: 500 }}>{emotion}</span>
+          </div>
+        ))}
       </div>
-      <div className="legend-divider"></div>
-      <div className="legend-section">
-        <h4 className="legend-title">Identity (Style)</h4>
-        <div className="legend-items">
-          <div className="legend-item">
-            <span
-              className="legend-color-box"
-              style={{ border: '2px solid var(--accent-blue)', background: 'transparent' }}
-            ></span>
-            <span className="legend-text">Known Individual</span>
-          </div>
-          <div className="legend-item">
-            <span
-              className="legend-color-box"
-              style={{ border: '2px dashed #ef4444', background: 'transparent' }}
-            ></span>
-            <span className="legend-text">Unknown Subject</span>
-          </div>
+      
+      {/* Divider */}
+      <div style={{ width: '1px', height: '16px', background: 'rgba(148, 163, 184, 0.2)' }}></div>
+      
+      {/* Identity Section */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: '0.75rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Identity:</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          <span style={{ width: '10px', height: '10px', border: '1.5px solid var(--accent-blue)', borderRadius: '2px', display: 'inline-block' }}></span>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text)', fontWeight: 500 }}>Known</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          <span style={{ width: '10px', height: '10px', border: '1.5px dashed #ef4444', borderRadius: '2px', display: 'inline-block' }}></span>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text)', fontWeight: 500 }}>Unknown</span>
         </div>
       </div>
     </div>
@@ -380,7 +385,7 @@ export default function LivePage() {
 
           // Use the modular predictBase64 helper from api.js (attaches JWT automatically)
           const base64Image = dataUrl.replace(/^data:image\/[a-z]+;base64,/, '')
-          const data = await predictBase64(base64Image, 'snapshot.jpg')
+          const data = await predictBase64(base64Image, 'snapshot.jpg', 'Snapshot')
 
           clearInterval(interval)
           setSimulatedProgress(100)
@@ -498,7 +503,7 @@ export default function LivePage() {
         log(`[Inference] API Request started (Session #${currentSession})`)
 
         // Use our central API caller (carries tokens and abort signals correctly)
-        const data = await predictBase64(image_b64, 'live.jpg')
+        const data = await predictBase64(image_b64, 'live.jpg', 'Live Feed')
 
         // 2. POST-AWAIT SESSION GUARD
         if (activeSessionRef.current !== currentSession || controller.signal.aborted) {
@@ -783,14 +788,44 @@ export default function LivePage() {
               )}
               {!isSimulating && snapshotResult && snapshotResult.results.length > 0 && (
                 <div className="results-list" style={{ flexGrow: 1, overflowY: 'auto' }}>
-                  <div className="badge-row fade-in" style={{ marginBottom: '1rem' }}>
-                    <span className="badge">Faces: {snapshotResult.n_faces}</span>
-                    <span className="badge">Identified: {snapshotResult.n_identified}</span>
-                    <span className="badge">Unknown: {snapshotResult.n_faces - snapshotResult.n_identified}</span>
+                  <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.25rem' }}>
+                    <div style={{
+                      flex: 1,
+                      background: 'rgba(30, 41, 59, 0.4)',
+                      border: '1px solid rgba(255, 255, 255, 0.05)',
+                      borderRadius: '0.75rem',
+                      padding: '0.75rem',
+                      textAlign: 'center',
+                    }}>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--accent-blue)' }}>{snapshotResult.n_faces}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '2px' }}>Faces</div>
+                    </div>
+                    <div style={{
+                      flex: 1,
+                      background: 'rgba(30, 41, 59, 0.4)',
+                      border: '1px solid rgba(255, 255, 255, 0.05)',
+                      borderRadius: '0.75rem',
+                      padding: '0.75rem',
+                      textAlign: 'center',
+                    }}>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--success)' }}>{snapshotResult.n_identified}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '2px' }}>Identified</div>
+                    </div>
+                    <div style={{
+                      flex: 1,
+                      background: 'rgba(30, 41, 59, 0.4)',
+                      border: '1px solid rgba(255, 255, 255, 0.05)',
+                      borderRadius: '0.75rem',
+                      padding: '0.75rem',
+                      textAlign: 'center',
+                    }}>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--danger)' }}>{snapshotResult.n_faces - snapshotResult.n_identified}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '2px' }}>Unknown</div>
+                    </div>
                   </div>
                   {(() => {
                     const isKnownName = (n) =>
-                      n && n.toUpperCase() !== 'UNKNOWN' && n.toLowerCase() !== 'unknown subject'
+                      n && n.toUpperCase() !== 'UNKNOWN' && n.toLowerCase() !== 'unknown subject' && n.toLowerCase() !== 'unrecognised'
                     const known = snapshotResult.results.filter((p) => isKnownName(p.name))
                     const unknown = snapshotResult.results.filter((p) => !isKnownName(p.name))
                     return (
@@ -863,11 +898,31 @@ export default function LivePage() {
                 </div>
               ) : (
                 <div className="results-list" style={{ flexGrow: 1, overflowY: 'auto' }}>
-                  <div className="badge-row fade-in" style={{ marginBottom: '1rem' }}>
-                    <span className="badge">Active Faces: {detectedFaces.length}</span>
-                    <span className="badge">
-                      Identified: {detectedFaces.filter((f) => f.name && f.name.toLowerCase() !== 'unknown' && f.name.toLowerCase() !== 'unknown subject').length}
-                    </span>
+                  <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.25rem' }}>
+                    <div style={{
+                      flex: 1,
+                      background: 'rgba(30, 41, 59, 0.4)',
+                      border: '1px solid rgba(255, 255, 255, 0.05)',
+                      borderRadius: '0.75rem',
+                      padding: '0.75rem',
+                      textAlign: 'center',
+                    }}>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--accent-blue)' }}>{detectedFaces.length}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '2px' }}>Active Faces</div>
+                    </div>
+                    <div style={{
+                      flex: 1,
+                      background: 'rgba(30, 41, 59, 0.4)',
+                      border: '1px solid rgba(255, 255, 255, 0.05)',
+                      borderRadius: '0.75rem',
+                      padding: '0.75rem',
+                      textAlign: 'center',
+                    }}>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--success)' }}>
+                        {detectedFaces.filter((f) => f.name && f.name.toLowerCase() !== 'unknown' && f.name.toLowerCase() !== 'unknown subject').length}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '2px' }}>Identified</div>
+                    </div>
                   </div>
                   {detectedFaces.length === 0 ? (
                     <div

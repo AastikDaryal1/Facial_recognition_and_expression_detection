@@ -14,15 +14,14 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Activity,
-  Zap,
-  Cpu,
-  Users,
-  ImagePlus,
   ScanFace,
+  Cpu,
+  TrendingUp,
+  ImagePlus,
   ShieldCheck,
 } from 'lucide-react'
 import { useAuth } from '../AuthContext'
-import { fetchModelInfo, fetchMetrics } from '../api'
+import { fetchModelInfo, fetchSessions } from '../api'
 
 function ActionCard({ icon: Icon, title, description, buttonText, to }) {
   return (
@@ -41,22 +40,19 @@ function ActionCard({ icon: Icon, title, description, buttonText, to }) {
 
 export default function HomePage() {
   const { user } = useAuth()
-  const [stats,   setStats]   = useState({ uptime: '0s', latency: '0s', count: 0 })
-  const [members, setMembers] = useState([])
+  const [userStats, setUserStats] = useState({ scans: 0, faces: 0, identified: 0 })
+  const [members,   setMembers]   = useState([])
 
   useEffect(() => {
-    // fetchMetrics is super_admin only — skip for regular users to avoid 403
-    if (user?.role === 'super_admin') {
-      fetchMetrics()
-        .then(data => {
-          setStats({
-            uptime  : `${data.uptime_s || 0}s`,
-            latency : `${data.avg_latency_s || 0}s`,
-            count   : data.request_count || 0,
-          })
-        })
-        .catch(() => {})
-    }
+    // Load user's own sessions to compute personal KPIs
+    fetchSessions()
+      .then(sessions => {
+        const scans      = sessions.length
+        const faces      = sessions.reduce((a, s) => a + (s.n_faces      || 0), 0)
+        const identified = sessions.reduce((a, s) => a + (s.n_identified || 0), 0)
+        setUserStats({ scans, faces, identified })
+      })
+      .catch(() => {})
 
     // Fetch model info
     fetchModelInfo()
@@ -87,7 +83,7 @@ export default function HomePage() {
           </p>
         )}
 
-        {/* Stats */}
+        {/* Stats — personalised per-member KPIs */}
         <div className="stats-grid">
           <div className="stat-card glass-card">
             <div className="stat-icon"><Activity size={18} /></div>
@@ -97,24 +93,28 @@ export default function HomePage() {
             </div>
           </div>
           <div className="stat-card glass-card">
-            <div className="stat-icon"><Zap size={18} /></div>
+            <div className="stat-icon"><ScanFace size={18} /></div>
             <div className="stat-info">
-              <span className="stat-label">Avg. Latency</span>
-              <span className="stat-value">{stats.latency}</span>
+              <span className="stat-label">My Total Scans</span>
+              <span className="stat-value">{userStats.scans}</span>
             </div>
           </div>
           <div className="stat-card glass-card">
             <div className="stat-icon"><Cpu size={18} /></div>
             <div className="stat-info">
-              <span className="stat-label">Uptime</span>
-              <span className="stat-value">{stats.uptime}</span>
+              <span className="stat-label">Faces Detected</span>
+              <span className="stat-value">{userStats.faces}</span>
             </div>
           </div>
           <div className="stat-card glass-card">
-            <div className="stat-icon"><Users size={18} /></div>
+            <div className="stat-icon"><TrendingUp size={18} /></div>
             <div className="stat-info">
-              <span className="stat-label">Requests</span>
-              <span className="stat-value">{stats.count}</span>
+              <span className="stat-label">Recognition Rate</span>
+              <span className="stat-value">
+                {userStats.faces > 0
+                  ? `${((userStats.identified / userStats.faces) * 100).toFixed(0)}%`
+                  : '—'}
+              </span>
             </div>
           </div>
         </div>

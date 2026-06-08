@@ -31,7 +31,7 @@ from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies import get_current_user
-from api.models import Session, User, UserRole
+from api.models import Session, User
 from db.base import get_db
 
 router = APIRouter()
@@ -96,9 +96,9 @@ def _check_session_access(current_user: User, session: Session) -> None:
     - org_admin → can see all sessions within their org
     - super_admin → can see everything
     """
-    if current_user.role == UserRole.super_admin:
+    if current_user.role == "super_admin":
         return
-    if current_user.role == UserRole.org_admin:
+    if current_user.role == "org_admin":
         if session.org_id != current_user.org_id:
             raise HTTPException(status.HTTP_403_FORBIDDEN,
                                 "You can only access sessions within your own organisation.")
@@ -130,9 +130,9 @@ async def list_sessions(
         offset = (page - 1) * page_size
         stmt = select(Session).order_by(desc(Session.created_at)).offset(offset).limit(page_size)
 
-        if current_user.role == UserRole.super_admin:
+        if current_user.role == "super_admin":
             pass  # no filter — sees all
-        elif current_user.role == UserRole.org_admin:
+        elif current_user.role == "org_admin":
             stmt = stmt.where(Session.org_id == current_user.org_id)
         else:
             stmt = stmt.where(Session.user_id == current_user.id)
@@ -172,7 +172,7 @@ async def update_session_note(
     - super_admin → can annotate any session
     - user        → cannot annotate (403)
     """
-    if current_user.role == UserRole.user:
+    if current_user.role == "member":
         raise HTTPException(status.HTTP_403_FORBIDDEN,
                             "Users cannot annotate sessions.")
 
@@ -197,7 +197,7 @@ async def delete_session(
     - super_admin → can delete any session
     - user        → cannot delete (403)
     """
-    if current_user.role == UserRole.user:
+    if current_user.role == "member":
         raise HTTPException(status.HTTP_403_FORBIDDEN,
                             "Users cannot delete sessions.")
 

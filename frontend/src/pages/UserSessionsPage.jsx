@@ -104,9 +104,17 @@ export default function UserSessionsPage() {
         <div style={{ display: 'grid', gap: '0.75rem' }}>
           {sessions.map(s => {
             const isExpanded = expandedSession === s.id
-            const results    = s.results_json?.results || (Array.isArray(s.results_json) ? s.results_json : [])
-            const known      = results.filter(f => f.name && f.name.toUpperCase() !== 'UNKNOWN')
-            const unknown    = results.filter(f => !f.name || f.name.toUpperCase() === 'UNKNOWN')
+            const resultsData= s.results_json || {}
+            const results    = resultsData.results || (Array.isArray(s.results_json) ? s.results_json : [])
+            const method     = resultsData.detection_method || (s.annotated_image ? 'Upload' : 'Unknown')
+            const isKnown = (n) => n && n.toUpperCase() !== 'UNKNOWN' && n.toLowerCase() !== 'unknown subject' && n.toLowerCase() !== 'unrecognised'
+            const known      = results.filter(f => isKnown(f.name))
+            const unknown    = results.filter(f => !isKnown(f.name))
+            const methodBadge = {
+              'Upload':    { color: '#60a5fa', bg: 'rgba(96,165,250,0.12)',  border: 'rgba(96,165,250,0.35)',  icon: '📤' },
+              'Snapshot':  { color: '#fbbf24', bg: 'rgba(251,191,36,0.12)',  border: 'rgba(251,191,36,0.35)',  icon: '📸' },
+              'Live Feed': { color: '#34d399', bg: 'rgba(52,211,153,0.12)',  border: 'rgba(52,211,153,0.35)',  icon: '🎥' },
+            }[method] || { color: '#94a3b8', bg: 'rgba(148,163,184,0.1)', border: 'rgba(148,163,184,0.3)', icon: '❓' }
 
             return (
               <div key={s.id} style={{
@@ -122,16 +130,21 @@ export default function UserSessionsPage() {
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem',
                 }}>
                   <div style={{ flex: 1 }}>
-                    <p style={{ margin: 0, fontWeight: 600, fontSize: '0.9rem', color: '#f1f5f9' }}>
-                      {s.n_faces} face{s.n_faces !== 1 ? 's' : ''} detected
-                      <span style={{ color: '#34d399', marginLeft: '0.5rem' }}>· {s.n_identified} identified</span>
-                      {s.n_faces - s.n_identified > 0 && (
-                        <span style={{ color: '#f87171', marginLeft: '0.5rem' }}>
-                          · {s.n_faces - s.n_identified} unknown
-                        </span>
-                      )}
-                    </p>
-                    <p style={{ margin: '0.25rem 0 0', color: '#64748b', fontSize: '0.78rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
+                      <p style={{ margin: 0, fontWeight: 600, fontSize: '0.9rem', color: '#f1f5f9' }}>
+                        {s.n_faces} face{s.n_faces !== 1 ? 's' : ''} detected
+                        <span style={{ color: '#34d399', marginLeft: '0.5rem' }}>· {s.n_identified} identified</span>
+                        {s.n_faces - s.n_identified > 0 && (
+                          <span style={{ color: '#f87171', marginLeft: '0.5rem' }}>
+                            · {s.n_faces - s.n_identified} unknown
+                          </span>
+                        )}
+                      </p>
+                      <span style={{ background: methodBadge.bg, border: `1px solid ${methodBadge.border}`, borderRadius: '20px', padding: '0.15rem 0.6rem', fontSize: '0.7rem', color: methodBadge.color, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                        {methodBadge.icon} {method}
+                      </span>
+                    </div>
+                    <p style={{ margin: 0, color: '#64748b', fontSize: '0.78rem' }}>
                       {s.created_at ? new Date(s.created_at).toLocaleString() : ''}
                       {' · '}{s.elapsed_s}s
                       {s.note && (
@@ -167,7 +180,7 @@ export default function UserSessionsPage() {
                   }}>
 
                     {/* Annotated image */}
-                    {s.annotated_image && (
+                    {s.annotated_image ? (
                       <div style={{ marginBottom: '1rem' }}>
                         <p style={{ margin: '0 0 0.5rem', fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                           📸 Annotated Image
@@ -177,12 +190,16 @@ export default function UserSessionsPage() {
                           alt="Annotated detection"
                           style={{
                             width: '100%', maxWidth: '480px', borderRadius: '8px',
-                            border: '1px solid rgba(99,102,241,0.3)',
+                            border: `1px solid ${methodBadge.border}`,
                             display: 'block',
                           }}
                         />
                       </div>
-                    )}
+                    ) : method === 'Live Feed' ? (
+                      <p style={{ margin: '0 0 1rem', fontSize: '0.78rem', color: '#475569', fontStyle: 'italic' }}>
+                        🎥 Live Feed frames are not saved as images.
+                      </p>
+                    ) : null}
 
                     {/* Summary pills */}
                     <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>

@@ -203,8 +203,9 @@ class PredictResponse(BaseModel):
 
 
 class Base64Request(BaseModel):
-    image_b64   : str          # base64-encoded JPEG/PNG
-    filename    : str = "input.jpg"
+    image_b64        : str          # base64-encoded JPEG/PNG
+    filename         : str = "input.jpg"
+    detection_method : str = "Live Feed"   # "Snapshot" or "Live Feed"
 
 
 class HealthResponse(BaseModel):
@@ -413,7 +414,7 @@ async def predict_image(
             n_faces         = result["n_faces"],
             n_identified    = result["n_identified"],
             elapsed_s       = round(elapsed, 3),
-            results_json    = {"results": result["results"]},
+            results_json    = {"results": result["results"], "detection_method": "Upload"},
             annotated_image = annotated_b64,
         )
         db.add(session_rec)
@@ -461,11 +462,11 @@ async def predict_base64(
         raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, f"File size exceeds {MAX_UPLOAD_SIZE_MB}MB limit.")
 
     try:
-        # Live mode: Enable crop generation for better visual feedback (is_live=True)
+        is_snapshot = payload.detection_method == "Snapshot"
         result = _run_inference(
             image_bytes,
             payload.filename,
-            save_annotated=False,
+            save_annotated=is_snapshot,
             generate_crops=True,
             is_live=True,
         )
@@ -488,7 +489,7 @@ async def predict_base64(
             n_faces         = result["n_faces"],
             n_identified    = result["n_identified"],
             elapsed_s       = round(elapsed, 3),
-            results_json    = {"results": result["results"]},
+            results_json    = {"results": result["results"], "detection_method": payload.detection_method},
             annotated_image = annotated_b64,
         )
         db.add(session_rec)

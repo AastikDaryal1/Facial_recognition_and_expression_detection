@@ -133,7 +133,7 @@ def _annotate_image(
         cv2.rectangle(canvas, (x, max(0, y - label_h)), (x + w, y), color, -1)
 
         # Name text
-        name_text = f"{r['name']} ({r['name_conf']:.0f}%)" if r["name"] != "Unknown Subject" else "Unknown Subject"
+        name_text = f"{r['name']} ({r['name_conf']:.0f}%)" if r["name"] != "Unrecognised" else "Unrecognised"
         cv2.putText(canvas, name_text,
                     (x + 4, max(label_h - 30, y - 30)),
                     FONT, 0.55, (0, 0, 0), 2, cv2.LINE_AA)
@@ -162,7 +162,7 @@ def _annotate_image(
         legend_x += 130
 
     # Summary info bar
-    n_id  = sum(1 for r in results if r["name"] != "Unknown Subject")
+    n_id  = sum(1 for r in results if r["name"] != "Unrecognised")
     info  = (f"Faces: {len(results)}  |  Identified: {n_id}  |  "
              f"Unknown: {len(results) - n_id}")
     cv2.putText(canvas, info, (20, h_orig + LEGEND_H - 12),
@@ -269,14 +269,14 @@ def run(
         face_crop = img_bgr[y1:y2, x1:x2]
 
         # Identity
-        identity = {"name": "Unknown Subject", "confidence": 0.0}
+        identity = {"name": "Unrecognised", "confidence": 0.0}
         
         # Check brightness to mitigate low-light hallucination
         gray_face = cv2.cvtColor(face_crop, cv2.COLOR_BGR2GRAY)
         brightness = np.mean(gray_face)
 
         if brightness < LOW_LIGHT_THRESHOLD:
-            log.warning("  Face %d is too dark (brightness=%.1f < %d). Forcing Unknown Subject.", i+1, brightness, LOW_LIGHT_THRESHOLD)
+            log.warning("  Face %d is too dark (brightness=%.1f < %d). Forcing Unrecognised.", i+1, brightness, LOW_LIGHT_THRESHOLD)
         else:
             emb = _get_embedding(face_crop)
             if emb is not None:
@@ -336,7 +336,7 @@ def run(
     log.info("  Results JSON: %s", json_out)
 
     elapsed = time.time() - t0
-    n_id    = sum(1 for r in results if r["name"] != "Unknown Subject")
+    n_id    = sum(1 for r in results if r["name"] != "Unrecognised")
     log.info("Inference complete in %.2f s — %d faces, %d identified.", elapsed, len(results), n_id)
 
     return {

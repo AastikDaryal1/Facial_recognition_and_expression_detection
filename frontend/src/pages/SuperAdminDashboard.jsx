@@ -19,9 +19,9 @@ import {
 } from 'recharts'
 import { useAuth } from '../AuthContext'
 import {
-  fetchMetrics, fetchOrganisations, createOrganisation,
+  fetchMetrics, fetchOrganisations, createOrganisation, deleteOrganisation,
   fetchUsers, deactivateUser, activateUser, changeUserRole,
-  deleteUser, inviteUser, fetchAuditLogs, fetchSessions,
+  deleteUser, inviteUser, fetchAuditLogs, fetchSessions, triggerSync,
 } from '../api'
 
 const TABS = ['Overview', 'Organisations', 'People', 'Sessions', 'Audit Logs']
@@ -149,6 +149,9 @@ export default function SuperAdminDashboard() {
   const [newOrgName,  setNewOrgName]  = useState('')
   const [creatingOrg, setCreatingOrg] = useState(false)
 
+  // Cloud sync
+  const [syncing, setSyncing] = useState(false)
+
   const load = async () => {
     setLoading(true); setError('')
     try {
@@ -192,6 +195,10 @@ export default function SuperAdminDashboard() {
     if (!window.confirm('Permanently delete this user?')) return
     try { await deleteUser(id); load() } catch (e) { setError(e.message) }
   }
+  const handleDeleteOrg   = async (id) => {
+    if (!window.confirm('Permanently delete this organisation? All users in it will be unassigned.')) return
+    try { await deleteOrganisation(id); load() } catch (e) { setError(e.message) }
+  }
   const handleRoleChange = async (id, newRole, currentRole) => {
     const roleLabel = { org_admin: 'Org Admin', member: 'Member' }
     if (!window.confirm(`Change role from "${roleLabel[currentRole]}" to "${roleLabel[newRole]}"?\nThis affects permissions immediately.`)) { load(); return }
@@ -211,6 +218,19 @@ export default function SuperAdminDashboard() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)', color: '#f1f5f9' }}>
+      <style>{`
+        @keyframes pulse {
+          0% { opacity: 0.4; transform: scale(0.9); }
+          50% { opacity: 1; transform: scale(1.15); }
+          100% { opacity: 0.4; transform: scale(0.9); }
+        }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+        .spin {
+          animation: spin 1s linear infinite;
+        }
+      `}</style>
 
       {/* Navbar */}
       <header style={{ background: 'rgba(15,23,42,0.8)', backdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(99,102,241,0.2)', padding: '0 2rem', height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 100 }}>
@@ -251,14 +271,34 @@ export default function SuperAdminDashboard() {
         {tab === 'Overview' && (
           <div>
             {/* Stat cards row */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
               <StatCard icon={Building2}    label="Organisations"    value={orgs.length}                                             color="#8b5cf6" />
               <StatCard icon={Users}        label="Total People"     value={users.length}                                            color="#06b6d4" />
               <StatCard icon={ScanFace}     label="Total Scans"      value={sessions.length}                                         color="#6366f1" />
               <StatCard icon={TrendingUp}   label="Recognition Rate" value={accuracy === '—' ? '—' : `${accuracy}%`}                color="#10b981" sub={`${totalIdentified}/${totalFaces} faces`} />
               <StatCard icon={Activity}     label="Avg Latency"      value={metrics ? `${metrics.avg_latency_s}s` : '—'}             color="#f59e0b" />
               <StatCard icon={ClipboardList}label="Audit Entries"    value={logs.length}                                             color="#f43f5e" />
-              <StatCard icon={RefreshCw}    label="Cloud Sync"       value={metrics?.gcs_watcher_status === 'Syncing' ? 'Syncing…' : 'Idle'} color="#10b981" />
+              <div onClick={async () => { if (syncing) return; setSyncing(true); try { await triggerSync(); await load() } catch (e) { setError(e.message) } setSyncing(false) }} style={{ cursor: syncing ? 'wait' : 'pointer' }} title="Click to trigger Cloud Sync">
+                <StatCard 
+                  icon={RefreshCw} 
+                  label="Cloud Sync" 
+                  value={
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {syncing ? 'Syncing…' : (metrics?.gcs_watcher_status === 'Syncing' ? 'Syncing…' : 'Idle')}
+                      <span style={{
+                        width: '8px',
+                        height: '8px',
+                        borderRadius: '50%',
+                        background: syncing || metrics?.gcs_watcher_status === 'Syncing' ? '#fbbf24' : '#10b981',
+                        display: 'inline-block',
+                        boxShadow: syncing || metrics?.gcs_watcher_status === 'Syncing' ? '0 0 8px #fbbf24' : '0 0 8px #10b981',
+                        animation: syncing || metrics?.gcs_watcher_status === 'Syncing' ? 'pulse 1.5s infinite' : 'none'
+                      }} />
+                    </span>
+                  }
+                  color="#10b981" 
+                />
+              </div>
             </div>
 
             {/* Charts row 1 */}
@@ -297,10 +337,11 @@ export default function SuperAdminDashboard() {
                   ? <p style={{ color: '#475569', fontSize: '0.85rem', margin: '2rem 0', textAlign: 'center' }}>No scan data yet.</p>
                   : <ResponsiveContainer width="100%" height={180}>
                       <PieChart>
-                        <Pie data={emotionDist} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={65} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false} fontSize={10}>
+                        <Pie data={emotionDist} dataKey="value" nameKey="name" cx="50%" cy="40%" outerRadius={55} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false} fontSize={10}>
                           {emotionDist.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
                         </Pie>
                         <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid rgba(99,102,241,0.3)', borderRadius: '8px', color: '#f1f5f9' }} />
+                        <Legend wrapperStyle={{ color: '#94a3b8', fontSize: '0.78rem', marginTop: '10px' }} />
                       </PieChart>
                     </ResponsiveContainer>
                 }
@@ -333,6 +374,9 @@ export default function SuperAdminDashboard() {
                 <button onClick={() => navigate('/upload')} style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '8px', padding: '0.7rem 1.2rem', color: '#34d399', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
                   <LayoutDashboard size={16} /> Go to Detection
                 </button>
+                <button onClick={async () => { if (syncing) return; setSyncing(true); try { await triggerSync(); await load() } catch (e) { setError(e.message) } setSyncing(false) }} disabled={syncing} style={{ background: syncing ? 'rgba(16,185,129,0.3)' : 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '8px', padding: '0.7rem 1.2rem', color: '#34d399', cursor: syncing ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
+                  <RefreshCw size={16} className={syncing ? 'spin' : ''} /> {syncing ? 'Syncing…' : 'Cloud Sync'}
+                </button>
               </div>
             </div>
           </div>
@@ -361,6 +405,9 @@ export default function SuperAdminDashboard() {
                     <span style={{ color: '#64748b', fontSize: '0.8rem' }}>
                       {users.filter(u => u.org_id === org.id && u.role !== 'super_admin').length} members
                     </span>
+                    <button onClick={() => handleDeleteOrg(org.id)} title="Delete Organisation" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '6px', padding: '0.3rem 0.5rem', color: '#f87171', cursor: 'pointer', display: 'flex', alignItems: 'center', marginLeft: '0.5rem' }}>
+                      <Trash2 size={14} />
+                    </button>
                   </div>
                 </div>
               ))}
@@ -442,31 +489,58 @@ export default function SuperAdminDashboard() {
                 : <div style={{ display: 'grid', gap: '0.75rem' }}>
                     {filtered.map(s => {
                       const isExpanded = expandedSession === s.id
-                      const results    = s.results_json?.results || (Array.isArray(s.results_json) ? s.results_json : [])
-                      const known      = results.filter(f => f.name && f.name.toUpperCase() !== 'UNKNOWN')
-                      const unknown    = results.filter(f => !f.name || f.name.toUpperCase() === 'UNKNOWN')
+                      const resultsData= s.results_json || {}
+                      const results    = resultsData.results || (Array.isArray(s.results_json) ? s.results_json : [])
+                      const method     = resultsData.detection_method || (s.annotated_image ? 'Upload' : 'Unknown')
+                      const isKnown = (n) => n && n.toUpperCase() !== 'UNKNOWN' && n.toLowerCase() !== 'unknown subject' && n.toLowerCase() !== 'unrecognised'
+                      const known      = results.filter(f => isKnown(f.name))
+                      const unknown    = results.filter(f => !isKnown(f.name))
+                      const methodBadge = {
+                        'Upload':    { color: '#60a5fa', bg: 'rgba(96,165,250,0.12)',  border: 'rgba(96,165,250,0.35)',  icon: '📤' },
+                        'Snapshot':  { color: '#fbbf24', bg: 'rgba(251,191,36,0.12)',  border: 'rgba(251,191,36,0.35)',  icon: '📸' },
+                        'Live Feed': { color: '#34d399', bg: 'rgba(52,211,153,0.12)',  border: 'rgba(52,211,153,0.35)',  icon: '🎥' },
+                      }[method] || { color: '#94a3b8', bg: 'rgba(148,163,184,0.1)', border: 'rgba(148,163,184,0.3)', icon: '❓' }
+
                       return (
                         <div key={s.id} style={{ background: 'rgba(15,23,42,0.6)', border: `1px solid ${isExpanded ? 'rgba(99,102,241,0.4)' : 'rgba(71,85,105,0.3)'}`, borderRadius: '10px', overflow: 'hidden' }}>
                           <div onClick={() => setExpandedSession(isExpanded ? null : s.id)} style={{ padding: '1rem 1.25rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
                             <ScanFace size={16} color="#6366f1" />
                             <div style={{ flex: 1 }}>
-                              <p style={{ margin: 0, fontWeight: 600, fontSize: '0.875rem' }}>{known.length} identified · {unknown.length} unknown · {s.n_faces} face{s.n_faces !== 1 ? 's' : ''}</p>
-                              <p style={{ margin: '0.15rem 0 0', color: '#64748b', fontSize: '0.75rem' }}>{new Date(s.created_at).toLocaleString()} · {s.elapsed_s?.toFixed(2)}s</p>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
+                                <p style={{ margin: 0, fontWeight: 600, fontSize: '0.875rem' }}>
+                                  {known.length} identified · {unknown.length} unknown · {s.n_faces} face{s.n_faces !== 1 ? 's' : ''}
+                                </p>
+                                <span style={{ background: methodBadge.bg, border: `1px solid ${methodBadge.border}`, borderRadius: '20px', padding: '0.15rem 0.6rem', fontSize: '0.7rem', color: methodBadge.color, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                                  {methodBadge.icon} {method}
+                                </span>
+                              </div>
+                              <p style={{ margin: 0, color: '#64748b', fontSize: '0.75rem' }}>
+                                {new Date(s.created_at).toLocaleString()} · {s.elapsed_s?.toFixed(2)}s
+                              </p>
                             </div>
                             <span style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: '20px', padding: '0.2rem 0.7rem', color: '#818cf8', fontSize: '0.73rem', fontWeight: 600 }}>🏢 {orgMap[s.org_id] || '—'}</span>
                             {isExpanded ? <ChevronUp size={14} color="#64748b" /> : <ChevronDown size={14} color="#64748b" />}
                           </div>
                           {isExpanded && (
-                            <div style={{ padding: '0 1.25rem 1rem', borderTop: '1px solid rgba(71,85,105,0.2)' }}>
-                              {results.map((f, i) => {
-                                const isKnown = f.name && f.name.toUpperCase() !== 'UNKNOWN'
-                                return (
-                                  <span key={i} style={{ display: 'inline-block', margin: '0.3rem 0.3rem 0 0', background: isKnown ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', border: `1px solid ${isKnown ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`, color: isKnown ? '#34d399' : '#f87171', borderRadius: '6px', padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
-                                    {f.name || 'Unknown'}{f.emotion ? ` · ${f.emotion}` : ''}
-                                  </span>
-                                )
-                              })}
-                              {s.annotated_image && <img src={`data:image/jpeg;base64,${s.annotated_image}`} alt="annotated" style={{ marginTop: '0.75rem', maxWidth: '100%', borderRadius: '8px', border: '1px solid rgba(71,85,105,0.3)' }} />}
+                            <div style={{ padding: '0 1.25rem 1rem', borderTop: '1px solid rgba(71,85,105,0.2)', background: 'rgba(15,23,42,0.4)' }}>
+                              {s.annotated_image ? (
+                                <div style={{ marginBottom: '1rem', marginTop: '0.75rem' }}>
+                                  <p style={{ margin: '0 0 0.5rem', fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>📸 Annotated Image</p>
+                                  <img src={`data:image/jpeg;base64,${s.annotated_image}`} alt="Annotated" style={{ width: '100%', maxWidth: '480px', borderRadius: '8px', border: `1px solid ${methodBadge.border}`, display: 'block' }} />
+                                </div>
+                              ) : method === 'Live Feed' ? (
+                                <p style={{ margin: '0.75rem 0', fontSize: '0.78rem', color: '#475569', fontStyle: 'italic' }}>🎥 Live Feed frames are not saved as images.</p>
+                              ) : null}
+                              <div style={{ marginTop: '0.5rem' }}>
+                                {results.map((f, i) => {
+                                  const isFaceKnown = isKnown(f.name)
+                                  return (
+                                    <span key={i} style={{ display: 'inline-block', margin: '0.3rem 0.3rem 0 0', background: isFaceKnown ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', border: `1px solid ${isFaceKnown ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`, color: isFaceKnown ? '#34d399' : '#f87171', borderRadius: '6px', padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}>
+                                      {isFaceKnown ? f.name : 'Unrecognised'}{f.emotion ? ` · ${f.emotion}` : ''}
+                                    </span>
+                                  )
+                                })}
+                              </div>
                             </div>
                           )}
                         </div>

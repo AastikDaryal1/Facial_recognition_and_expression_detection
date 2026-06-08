@@ -46,7 +46,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies import require_role
-from api.models import Person, User, UserRole
+from api.models import Person, User
 import shutil
 import logging
 from db.base import get_db
@@ -132,7 +132,7 @@ async def _get_person_or_404(person_id: str, db: AsyncSession) -> Person:
 def _check_person_access(current_user: User, person: Person) -> None:
     """org_admin can only access persons within their own org."""
     if (
-        current_user.role == UserRole.org_admin
+        current_user.role == "org_admin"
         and person.org_id != current_user.org_id
     ):
         raise HTTPException(
@@ -144,6 +144,71 @@ def _check_person_access(current_user: User, person: Person) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 # Endpoints
 # ─────────────────────────────────────────────────────────────────────────────
+
+_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
+
+log = logging.getLogger(__name__)
+
+
+async def _sync_local_folders_to_db(db: AsyncSession, current_user: User) -> None:
+    """
+    Scan TEAM_FACES_DIR for person folders and ensure each one has a
+    corresponding Person record in the database.  This keeps the
+    Enrolled Persons page in sync with data downloaded from GCS.
+    """
+    if not TEAM_FACES_DIR.exists():
+        return
+
+    # Fetch ALL persons (including inactive) so we don't re-create deleted ones
+    result = await db.execute(select(Person))
+    db_persons = result.scalars().all()
+
+    # Build lookup: sanitized name → Person
+    existing = {sanitize_name(p.full_name): p for p in db_persons}
+
+    changed = False
+    for folder in TEAM_FACES_DIR.iterdir():
+        if not folder.is_dir():
+            continue
+        # Skip nested "team_faces" artifact from zip extraction
+        if folder.name.lower() == "team_faces":
+            continue
+
+        photo_count = len([f for f in folder.iterdir()
+                          if f.is_file() and f.suffix.lower() in _IMAGE_EXTS])
+        if photo_count == 0:
+            continue
+
+        key = sanitize_name(folder.name)
+        gcs_folder = f"team_faces/{folder.name}"
+        gcs_path   = f"gs://{GCS_BUCKET_NAME}/{gcs_folder}/"
+
+        if key in existing:
+            # Update photo count / gcs_path if they drifted
+            person = existing[key]
+            if person.photo_count != photo_count or person.gcs_path != gcs_path:
+                person.photo_count = photo_count
+                person.gcs_path    = gcs_path
+                changed = True
+        else:
+            # Auto-create a new Person record
+            display_name = folder.name  # preserve original capitalisation
+            new_person = Person(
+                org_id      = current_user.org_id,
+                full_name   = display_name,
+                gcs_path    = gcs_path,
+                photo_count = photo_count,
+                is_enrolled = photo_count >= 5,
+                is_active   = True,
+            )
+            db.add(new_person)
+            log.info("Auto-created Person record for local folder: %s (%d photos)",
+                     display_name, photo_count)
+            changed = True
+
+    if changed:
+        await db.commit()
+
 
 @router.get("", response_model=list[PersonOut])
 async def list_persons(
@@ -157,9 +222,12 @@ async def list_persons(
     - org_admin   → sees only persons in their own org
     - By default only active persons are returned. Pass ?include_inactive=true to see all.
     """
+    # Sync local TeamFaces folders into the database first
+    await _sync_local_folders_to_db(db, current_user)
+
     stmt = select(Person)
 
-    if current_user.role == UserRole.org_admin:
+    if current_user.role == "org_admin":
         stmt = stmt.where(Person.org_id == current_user.org_id)
 
     if not include_inactive:
@@ -456,23 +524,41 @@ async def delete_person(
     person.is_active = False
     await db.commit()
 
-    # Cleanup local directory
+    # Cleanup local directories (checking sanitized name, original name, and case insensitivity)
     safe_name = sanitize_name(person.full_name)
-    local_dir = TEAM_FACES_DIR / safe_name
-    if local_dir.is_dir():
-        try:
-            shutil.rmtree(local_dir, ignore_errors=True)
-            logging.getLogger(__name__).info("Deleted local person directory %s", local_dir)
-        except Exception as e:
-            logging.getLogger(__name__).warning("Failed to delete local directory %s: %s", local_dir, e)
+    local_dirs = {TEAM_FACES_DIR / safe_name, TEAM_FACES_DIR / person.full_name}
+    for folder in TEAM_FACES_DIR.iterdir():
+        if folder.is_dir() and sanitize_name(folder.name) == safe_name:
+            local_dirs.add(folder)
+            
+    for local_dir in local_dirs:
+        if local_dir.is_dir():
+            try:
+                shutil.rmtree(local_dir, ignore_errors=True)
+                logging.getLogger(__name__).info("Deleted local person directory %s", local_dir)
+            except Exception as e:
+                logging.getLogger(__name__).warning("Failed to delete local directory %s: %s", local_dir, e)
 
-    # Delete GCS folder
+    # Delete GCS folders
     try:
         from storage.gcs_storage import GCSStorage
         gcs = GCSStorage()
-        gcs_prefix = f"team_faces/{safe_name}/"
-        logging.getLogger(__name__).debug("Cleaning up GCS folder: %s", gcs_prefix)
-        gcs.delete_folder(gcs_prefix)
+        
+        prefixes = []
+        if person.gcs_path and person.gcs_path.startswith(f"gs://{GCS_BUCKET_NAME}/"):
+            prefix = person.gcs_path.replace(f"gs://{GCS_BUCKET_NAME}/", "")
+            prefixes.append(prefix)
+            
+        for name in (safe_name, person.full_name):
+            p1 = f"team_faces/{name}/"
+            p2 = f"team_faces/{name}"
+            for p in (p1, p2):
+                if p not in prefixes:
+                    prefixes.append(p)
+                    
+        for gcs_prefix in prefixes:
+            logging.getLogger(__name__).debug("Cleaning up GCS folder: %s", gcs_prefix)
+            gcs.delete_folder(gcs_prefix)
     except Exception as e:
         logging.getLogger(__name__).warning("GCS cleanup failed for %s: %s", person_id, e)
 

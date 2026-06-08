@@ -2,10 +2,10 @@
 api/auth/schemas.py
 ───────────────────
 Pydantic request and response models for auth endpoints.
+Role is handled as a plain string: "super_admin", "org_admin", "member"
 """
 
 from pydantic import BaseModel, EmailStr
-from api.models import UserRole
 
 
 class SignupRequest(BaseModel):
@@ -30,7 +30,7 @@ class InviteSignupRequest(BaseModel):
 
 class InviteRequest(BaseModel):
     email  : EmailStr
-    role   : str        # org_admin or member only
+    role   : str              # "org_admin" or "member" only
     org_id : str | None = None
 
 
